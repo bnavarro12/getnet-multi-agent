@@ -1,0 +1,10 @@
+fastapi==0.150.0
+uvicorn[standard]==0.54.0
+pydantic==2.13.5
+pydantic-settings==2.16.0
+google-genai==2.31.0
+httpx==0.28.1
+beautifulsoup4==4.15.0
+numpy==2.5.3
+ddgs==9.16.0
+pytest==9.1.1

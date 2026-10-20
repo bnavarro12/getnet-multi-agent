@@ -1,0 +1,96 @@
+{
+  "_comment": "FICTITIOUS demo data. Dates are stored as offsets from today (days_ago) so scenarios like 'yesterday's sales' always work. No real customer data is used.",
+  "customers": {
+    "cliente1988": {
+      "name": "Mariana Costa",
+      "business_name": "Padaria Pão Dourado",
+      "segment": "Bakery",
+      "city": "Porto Alegre - RS",
+      "plan": "Get Smart - rental",
+      "settlement_plan": {
+        "debit": "D+1 (next business day)",
+        "credit_one_time": "D+30",
+        "credit_installments": "Each installment every 30 days",
+        "pix": "Instant (D+0)",
+        "automatic_advance": false
+      },
+      "bank_account": "Santander ag. 1234 - account ending 5678",
+      "terminals": [
+        {
+          "serial": "GS-8841-2207",
+          "model": "Get Smart",
+          "status": "offline",
+          "connection": "Wi-Fi",
+          "last_seen_hours_ago": 3,
+          "wifi_signal": "weak (-82 dBm)",
+          "sim_carrier": "Vivo",
+          "sim_signal": "good",
+          "battery_pct": 64,
+          "firmware": "4.2.1",
+          "firmware_update_available": false
+        },
+        {
+          "serial": "GC-1093-4451",
+          "model": "Get Clássica",
+          "status": "online",
+          "connection": "4G chip",
+          "last_seen_hours_ago": 0,
+          "wifi_signal": null,
+          "sim_carrier": "Claro",
+          "sim_signal": "good",
+          "battery_pct": 88,
+          "firmware": "3.9.0",
+          "firmware_update_available": true
+        }
+      ],
+      "transactions": [
+        {"id": "TX-90021", "days_ago": 0, "time": "08:14", "type": "debit", "brand": "Visa", "amount": 18.50, "installments": 1, "status": "approved", "terminal": "GC-1093-4451"},
+        {"id": "TX-90022", "days_ago": 0, "time": "08:41", "type": "credit", "brand": "Mastercard", "amount": 245.00, "installments": 1, "status": "declined", "decline_code": "51", "terminal": "GC-1093-4451"},
+        {"id": "TX-90023", "days_ago": 0, "time": "08:43", "type": "credit", "brand": "Mastercard", "amount": 245.00, "installments": 1, "status": "declined", "decline_code": "51", "terminal": "GC-1093-4451"},
+        {"id": "TX-90024", "days_ago": 0, "time": "09:02", "type": "pix", "brand": "Pix", "amount": 32.00, "installments": 1, "status": "approved", "terminal": "GC-1093-4451"},
+        {"id": "TX-89950", "days_ago": 1, "time": "07:30", "type": "debit", "brand": "Elo", "amount": 27.90, "installments": 1, "status": "approved", "terminal": "GS-8841-2207"},
+        {"id": "TX-89951", "days_ago": 1, "time": "09:12", "type": "credit", "brand": "Visa", "amount": 120.00, "installments": 1, "status": "approved", "terminal": "GS-8841-2207"},
+        {"id": "TX-89952", "days_ago": 1, "time": "11:48", "type": "credit", "brand": "Mastercard", "amount": 480.00, "installments": 3, "status": "approved", "terminal": "GS-8841-2207"},
+        {"id": "TX-89953", "days_ago": 1, "time": "15:20", "type": "debit", "brand": "Visa", "amount": 54.30, "installments": 1, "status": "approved", "terminal": "GC-1093-4451"},
+        {"id": "TX-89954", "days_ago": 1, "time": "17:05", "type": "pix", "brand": "Pix", "amount": 89.00, "installments": 1, "status": "approved", "terminal": "GC-1093-4451"},
+        {"id": "TX-89955", "days_ago": 1, "time": "18:31", "type": "credit", "brand": "Elo", "amount": 75.00, "installments": 1, "status": "declined", "decline_code": "54", "terminal": "GS-8841-2207"},
+        {"id": "TX-89870", "days_ago": 2, "time": "10:02", "type": "debit", "brand": "Mastercard", "amount": 41.00, "installments": 1, "status": "approved", "terminal": "GS-8841-2207"},
+        {"id": "TX-89871", "days_ago": 2, "time": "16:40", "type": "credit", "brand": "Visa", "amount": 210.00, "installments": 2, "status": "approved", "terminal": "GC-1093-4451"}
+      ]
+    },
+    "cliente2024": {
+      "name": "Rafael Lima",
+      "business_name": "Lima Auto Peças",
+      "segment": "Auto parts",
+      "city": "São Paulo - SP",
+      "plan": "Get Clássica - rental",
+      "settlement_plan": {
+        "debit": "D+1 (next business day)",
+        "credit_one_time": "D+1 (automatic advance enabled)",
+        "credit_installments": "D+1 (automatic advance enabled)",
+        "pix": "Instant (D+0)",
+        "automatic_advance": true
+      },
+      "bank_account": "Itaú ag. 0001 - account ending 4321",
+      "terminals": [
+        {
+          "serial": "GC-7710-0034",
+          "model": "Get Clássica",
+          "status": "online",
+          "connection": "4G chip",
+          "last_seen_hours_ago": 0,
+          "wifi_signal": null,
+          "sim_carrier": "TIM",
+          "sim_signal": "good",
+          "battery_pct": 91,
+          "firmware": "3.9.0",
+          "firmware_update_available": false
+        }
+      ],
+      "transactions": [
+        {"id": "TX-77001", "days_ago": 1, "time": "10:20", "type": "credit", "brand": "Visa", "amount": 1350.00, "installments": 6, "status": "approved", "terminal": "GC-7710-0034"},
+        {"id": "TX-77002", "days_ago": 1, "time": "14:05", "type": "debit", "brand": "Elo", "amount": 210.00, "installments": 1, "status": "approved", "terminal": "GC-7710-0034"}
+      ]
+    }
+  }
+}

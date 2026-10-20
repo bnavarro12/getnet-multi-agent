@@ -1,0 +1,27 @@
+# Seed URLs for the Getnet knowledge base (one per line, '#' = comment).
+# The crawler also follows same-domain links one level deep from these pages.
+
+# International site (suggested in the challenge). Only /en is crawled: other country editions
+# (/pt = Portugal, /es, /ar, /mx...) describe other markets and would give Brazilian merchants wrong answers.
+https://www.getnet.net/en
+
+# Brazil - card machines and offers
+https://site.getnet.com.br/
+https://site.getnet.com.br/todas-as-maquininhas/
+https://site.getnet.com.br/ofertas
+https://site.getnet.com.br/taxas-personalizadas/
+https://site.getnet.com.br/get-tap/
+
+# Brazil - payments and financial services
+https://site.getnet.com.br/pix
+https://site.getnet.com.br/crediario/
+https://site.getnet.com.br/link-de-pagamento/
+https://site.getnet.com.br/conta-digital/
+https://site.getnet.com.br/emprestimo/
+https://site.getnet.com.br/getcheckout/
+https://site.getnet.com.br/pagamentos-recorrentes
+https://site.getnet.com.br/conversor-de-moedas/
+
+# Brazil - help center
+https://site.getnet.com.br/duvidas/
+https://site.getnet.com.br/get-ajuda/

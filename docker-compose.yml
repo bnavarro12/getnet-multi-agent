@@ -1,0 +1,14 @@
+services:
+  api:
+    build: .
+    image: getnet-multi-agent:latest
+    container_name: getnet-multi-agent
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - storage:/app/storage   # vector index + tickets survive restarts/rebuilds
+    restart: unless-stopped
+
+volumes:
+  storage:
