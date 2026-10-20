@@ -1,5 +1,7 @@
 # Getnet Multi-Agent Support System
 
+**[Leia em português](README.pt-BR.md)**
+
 A multi-agent customer assistant for Getnet merchants. A **Router Agent** reads each message and hands it to a
 **Knowledge Agent** (RAG over Getnet's website + web search), a **Customer Support Agent** (tools over the merchant's
 account data) or a **Human Escalation Agent**. Guardrails run before and after the agents, every step is traced, and the
