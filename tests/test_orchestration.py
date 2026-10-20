@@ -119,6 +119,16 @@ def test_hallucinated_tool_arguments_are_dropped(repo, settings, store):
     assert out["sales"]  # ran for cliente1988, extra arg ignored
 
 
+def test_full_evidence_only_when_requested(orchestrator):
+    r = orchestrator.handle("Can I sell through WhatsApp using the Payment Link?", "cliente1988")
+    assert "evidence" not in r  # the public API never returns raw tool outputs
+    r = orchestrator.handle("Can I sell through WhatsApp using the Payment Link?", "cliente1988", include_evidence=True)
+    ev = r["evidence"][0]
+    assert ev["tool"] == "search_knowledge_base" and ev["result"]["results"]  # complete, not the 300-char summary
+    step = next(s for s in r["trace"]["steps"] if s["step"] == "tool:search_knowledge_base")
+    assert len(step["result"]) <= 300
+
+
 def test_trace_and_metrics_are_recorded(orchestrator):
     r = orchestrator.handle("Do I need a bank account to receive sales via Pix?", "cliente1988")
     steps = [s["step"] for s in r["trace"]["steps"]]

@@ -25,6 +25,10 @@ class ToolContext:
     escalation_reason: str = ""
     sources: list[dict] = field(default_factory=list)   # citations collected during the turn
     tickets: list[str] = field(default_factory=list)
+    # Full tool outputs of the turn (the trace keeps only a short summary for logs).
+    # Returned only on request, e.g. to the evaluation judge.
+    evidence: list[dict] = field(default_factory=list)
+    include_evidence: bool = False
 
 
 @dataclass

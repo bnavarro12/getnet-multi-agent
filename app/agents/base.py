@@ -66,6 +66,7 @@ class ToolAgent:
                             tspan.attrs["exception"] = str(exc)[:200]
                     tspan.attrs["result"] = _summarize(output)
                 used.append(call.name)
+                ctx.evidence.append({"tool": call.name, "args": call.args, "result": output})
                 results.append((call.name, output))
             history.append(self.llm.tool_results_message(results))
 

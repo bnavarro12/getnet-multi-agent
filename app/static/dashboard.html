@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getnet Assistant Analytics</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f5f3; --panel: #fcfcfb; --ink: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e4e2de;
+    --grid: #ecebe7; --accent: #e3001b; --accent-ink: #ffffff; --chip: #f0eeea;
+    --series-1: #2a78d6; --track: #eceae5;
+    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #141413; --panel: #1a1a19; --ink: #f0efec; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+      --grid: #262624; --chip: #262624; --series-1: #3987e5; --track: #2a2a28;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #141413; --panel: #1a1a19; --ink: #f0efec; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --grid: #262624; --chip: #262624; --series-1: #3987e5; --track: #2a2a28;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 24px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--accent-ink);
+          display: grid; place-items: center; font-weight: 800; }
+  header h1 { font-size: 16px; margin: 0; }
+  header p { margin: 0; font-size: 12px; color: var(--muted); }
+  .spacer { flex: 1; }
+  .controls { display: flex; gap: 8px; align-items: center; }
+  select, .btn { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+                 color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; }
+  .btn:hover, select:hover { border-color: var(--accent); }
+  main { padding: 20px 24px 40px; max-width: 1240px; margin: 0 auto; display: grid; gap: 18px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .tile .label { font-size: 12px; color: var(--muted); }
+  .tile .value { font-size: 28px; font-weight: 650; letter-spacing: -.01em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .tile .sub { font-size: 12px; color: var(--faint); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+  .card h2 { font-size: 15px; margin: 0; }
+  .card .desc { font-size: 12px; color: var(--muted); margin: 2px 0 14px; }
+  .rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .rank li { display: grid; gap: 4px; }
+  .rank .q { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rank .meta { font-size: 11.5px; color: var(--faint); }
+  .barrow { display: grid; grid-template-columns: 1fr 64px; gap: 10px; align-items: center; }
+  .track { height: 10px; border-radius: 4px; background: var(--track); position: relative; }
+  .bar { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0 4px 4px 0; background: var(--series-1); min-width: 3px; }
+  .num { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .status { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); }
+  .status i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .cols { display: flex; align-items: flex-end; gap: 6px; height: 160px; border-bottom: 1px solid var(--line);
+          padding-top: 8px; }
+  .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 0; height: 100%; }
+  .col .stick { width: min(36px, 70%); background: var(--series-1); border-radius: 4px 4px 0 0; min-height: 2px; }
+  .col .clabel { font-size: 11px; color: var(--faint); margin-top: 4px; white-space: nowrap; }
+  .col .cval { font-size: 11.5px; margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+  .hit { cursor: default; }
+  details.table { margin-top: 12px; }
+  details.table summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
+  .ok { color: var(--good); } .bad { color: var(--critical); }
+  code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  #tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--panel); font-size: 12px;
+         padding: 6px 9px; border-radius: 6px; max-width: 320px; opacity: 0; transition: opacity .1s; z-index: 10; }
+  @media (max-width: 860px) {
+    header, main { padding-left: 16px; padding-right: 16px; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">G</div>
+  <div><h1>Assistant analytics</h1><p>What merchants ask and how well it gets answered</p></div>
+  <div class="spacer"></div>
+  <div class="controls">
+    <label for="days" class="status">Period</label>
+    <select id="days">
+      <option value="1">Last 24 hours</option>
+      <option value="7" selected>Last 7 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="">All time</option>
+    </select>
+    <a class="btn" href="/">← Console</a>
+  </div>
+</header>
+
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid2">
+    <div class="card">
+      <h2>Most asked questions</h2>
+      <p class="desc">Questions grouped ignoring case, accents and punctuation · number of times asked</p>
+      <div id="most"></div>
+    </div>
+    <div class="card">
+      <h2>Lowest success rate</h2>
+      <p class="desc">Share of times each question was answered well · 👍/👎 when rated, otherwise automatic resolution</p>
+      <div id="lowest"></div>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div class="card">
+      <h2>Questions per day</h2>
+      <p class="desc">Requests received in the selected period</p>
+      <div id="perday"></div>
+    </div>
+    <div class="card">
+      <h2>Requests by route</h2>
+      <p class="desc">Which agent path the router chose · number of requests</p>
+      <div id="routes"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Evaluation results</h2>
+    <p class="desc" id="evaldesc">Latest offline evaluation on the labelled dataset (real model)</p>
+    <div id="evals"></div>
+  </section>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pct = (v) => v === null || v === undefined ? "–" : `${Math.round(v * 100)}%`;
+const secs = (ms) => !ms ? "–" : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
+
+// Status: good / warning / critical, always icon + label, never colour alone.
+function status(rate) {
+  if (rate === null || rate === undefined) return "";
+  const [c, t] = rate >= 0.8 ? ["--good", "✓ good"] : rate >= 0.5 ? ["--warning", "! review"] : ["--critical", "✕ poor"];
+  return `<span class="status"><i style="background:var(${c})"></i>${t}</span>`;
+}
+
+// Tooltip layer (hover / focus on any element with data-tip).
+const tip = $("tip");
+document.addEventListener("pointerover", (e) => {
+  const el = e.target.closest("[data-tip]"); if (!el) return;
+  tip.innerHTML = el.dataset.tip; tip.style.opacity = 1;
+});
+document.addEventListener("pointermove", (e) => {
+  if (tip.style.opacity === "1") {
+    const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8), y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 8);
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  }
+});
+document.addEventListener("pointerout", (e) => { if (e.target.closest("[data-tip]")) tip.style.opacity = 0; });
+
+function tile(label, value, sub) {
+  return `<div class="tile"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub || "&nbsp;"}</div></div>`;
+}
+
+function rankList(items, valueOf, max, fmt, metaOf, tipOf) {
+  if (!items.length) return `<p class="empty">No questions yet in this period — ask something in the console.</p>`;
+  return `<ol class="rank">${items.map(it => {
+    const v = valueOf(it), w = max ? Math.max(1, (v / max) * 100) : 0;
+    return `<li class="hit" data-tip="${esc(tipOf(it))}">
+      <div class="q" title="${esc(it.question)}">${esc(it.question)}</div>
+      <div class="barrow"><div class="track"><span class="bar" style="width:${w}%"></span></div><div class="num">${fmt(v)}</div></div>
+      <div class="meta">${metaOf(it)}</div></li>`;
+  }).join("")}</ol>`;
+}
+
+function questionTable(items) {
+  return `<details class="table"><summary>View as table</summary><table>
+    <tr><th>Question</th><th>Route</th><th class="n">Asked</th><th class="n">Success</th><th class="n">👍</th><th class="n">👎</th><th class="n">Escalated</th></tr>
+    ${items.map(q => `<tr><td>${esc(q.question)}</td><td>${esc(q.route)}</td><td class="n">${q.asks}</td>
+      <td class="n">${pct(q.success_rate)}</td><td class="n">${q.up}</td><td class="n">${q.down}</td><td class="n">${q.escalations}</td></tr>`).join("")}
+  </table></details>`;
+}
+
+function render(d) {
+  const k = d.kpis;
+  $("kpis").innerHTML = [
+    tile("Questions", k.requests, "in the selected period"),
+    tile("Success rate", pct(k.success_rate), "rated 👍, or resolved automatically"),
+    tile("User approval", pct(k.approval_rate), `${k.ratings} rating${k.ratings === 1 ? "" : "s"}`),
+    tile("Escalated to a human", pct(k.escalation_rate), `errors: ${pct(k.error_rate)}`),
+    tile("Latency p50 / p95", `${secs(k.latency_p50_ms)}`, `p95 ${secs(k.latency_p95_ms)} · ~${k.avg_tokens} tokens/question`),
+  ].join("");
+
+  const maxAsks = Math.max(0, ...d.most_asked.map(q => q.asks));
+  $("most").innerHTML = rankList(d.most_asked, q => q.asks, maxAsks, v => `${v}×`,
+    q => `${esc(q.route)} · success ${pct(q.success_rate)}`,
+    q => `<b>${esc(q.question)}</b><br>Asked ${q.asks}× · success ${pct(q.success_rate)} · 👍 ${q.up} 👎 ${q.down}`) +
+    (d.most_asked.length ? questionTable(d.most_asked) : "");
+
+  $("lowest").innerHTML = rankList(d.lowest_success, q => q.success_rate, 1, pct,
+    q => `${status(q.success_rate)} · asked ${q.asks}× · ${esc(q.route)}${q.escalations ? ` · escalated ${q.escalations}×` : ""}`,
+    q => `<b>${esc(q.question)}</b><br>Success ${pct(q.success_rate)} of ${q.asks} · 👍 ${q.up} 👎 ${q.down}`) +
+    (d.lowest_success.length ? questionTable(d.lowest_success) : "");
+
+  if (!d.per_day.length) { $("perday").innerHTML = `<p class="empty">No data yet.</p>`; }
+  else {
+    const max = Math.max(...d.per_day.map(x => x.requests)), days = d.per_day.slice(-14);
+    $("perday").innerHTML = `<div class="cols">${days.map(x => `
+      <div class="col hit" data-tip="<b>${x.day}</b><br>${x.requests} questions · success ${pct(x.successes / x.requests)}">
+        <div class="cval">${x.requests}</div>
+        <div class="stick" style="height:${(x.requests / max) * 110}px"></div>
+        <div class="clabel">${x.day.slice(5)}</div></div>`).join("")}</div>
+      <details class="table"><summary>View as table</summary><table><tr><th>Day</th><th class="n">Questions</th><th class="n">Success</th></tr>
+      ${d.per_day.map(x => `<tr><td>${x.day}</td><td class="n">${x.requests}</td><td class="n">${pct(x.successes / x.requests)}</td></tr>`).join("")}</table></details>`;
+  }
+
+  const rmax = Math.max(0, ...d.routes.map(r => r.requests)), total = d.routes.reduce((a, r) => a + r.requests, 0);
+  $("routes").innerHTML = d.routes.length ? `<ol class="rank">${d.routes.map(r => `
+      <li class="hit" data-tip="<b>${esc(r.route)}</b><br>${r.requests} requests · ${pct(r.requests / total)} of total">
+        <div class="q">${esc(r.route)}</div>
+        <div class="barrow"><div class="track"><span class="bar" style="width:${(r.requests / rmax) * 100}%"></span></div>
+        <div class="num">${r.requests}</div></div></li>`).join("")}</ol>` : `<p class="empty">No data yet.</p>`;
+}
+
+function renderEvals(e) {
+  if (!e.available) {
+    $("evals").innerHTML = `<p class="empty">No evaluation report yet. Run <code>docker compose exec api python -m evals.run_evals --judge</code> and reload this page.</p>`;
+    return;
+  }
+  const s = e.summary;
+  $("evaldesc").textContent = `Latest offline evaluation on the labelled dataset (real model)${e.generated_at ? " · " + e.generated_at : ""} · ${s.cases} cases`;
+  const tiles = [
+    tile("Routing accuracy", pct(s.routing_accuracy), "router picked the expected agent"),
+    tile("Tool selection", pct(s.tool_selection_accuracy), "expected tools were called"),
+    tile("Content check", pct(s.content_check_rate), "answer mentions a key term"),
+  ];
+  if (s.avg_groundedness !== undefined) tiles.push(tile("Groundedness", `${s.avg_groundedness}/5`, `helpfulness ${s.avg_helpfulness}/5 · LLM judge`));
+  const mark = (b) => b ? `<span class="ok">✓</span>` : `<span class="bad">✕</span>`;
+  $("evals").innerHTML = `<div class="kpis">${tiles.join("")}</div>
+    <table><tr><th>Case</th><th>Question</th><th>Route (expected)</th><th>Route</th><th>Tools</th><th>Content</th><th class="n">Latency</th></tr>
+    ${e.cases.map(c => `<tr><td>${esc(c.id)}</td><td>${esc(c.message)}</td><td>${esc(c.route)} (${esc(c.expected_route)})</td>
+      <td>${mark(c.route_ok)}</td><td>${mark(c.tools_ok)}</td><td>${mark(c.content_ok)}</td><td class="n">${secs(c.latency_ms)}</td></tr>`).join("")}
+    </table>`;
+}
+
+async function load() {
+  const days = $("days").value;
+  try {
+    const [a, e] = await Promise.all([
+      fetch("/analytics" + (days ? `?days=${days}` : "")).then(r => r.json()),
+      fetch("/evals").then(r => r.json()),
+    ]);
+    render(a); renderEvals(e);
+  } catch (err) {
+    $("kpis").innerHTML = `<p class="empty">Could not load analytics: ${esc(err.message)}</p>`;
+  }
+}
+$("days").onchange = load;
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

@@ -39,6 +39,11 @@ curl -s -X POST http://localhost:8000/chat \
 atuou, a rota e a confiança, as ferramentas chamadas, as fontes e um trace passo a passo com as latências. Também
 permite alternar entre os lojistas fictícios e rodar os cenários de exemplo com um clique.
 
+**Painel de análise:** <http://localhost:8000/dashboard> — perguntas mais feitas, perguntas com menor índice de
+acerto, perguntas por dia e por rota, indicadores (taxa de sucesso, aprovação dos usuários, taxa de escalonamento,
+latência p50/p95) e o resultado da última avaliação. As respostas podem ser avaliadas com 👍/👎 no console; a §7 explica
+como o sucesso é medido.
+
 Documentação interativa da API (Swagger UI): <http://localhost:8000/docs>
 
 Para rodar todos os cenários de exemplo do desafio e imprimir um resumo legível:
@@ -234,7 +239,7 @@ Testar um sistema com LLM significa separar **o que precisa ser sempre verdade**
 
 O `FakeLLM` (`tests/fakes.py`) implementa a mesma interface do cliente Gemini: roteia por palavras-chave, chama a
 ferramenta que o cenário precisa e responde repetindo os resultados das ferramentas. Isso deixa os testes de integração
-**determinísticos, offline e rápidos** (44 testes em menos de um segundo), para rodar a cada commit. Um teste de
+**determinísticos, offline e rápidos** (51 testes em menos de um segundo), para rodar a cada commit. Um teste de
 integração falhando significa que a orquestração quebrou, e não que o modelo teve um dia ruim.
 
 **Testes de integração completos da orquestração** ampliam isso em quatro direções:
@@ -263,7 +268,14 @@ integração falhando significa que a orquestração quebrou, e não que o model
 - **Métricas:** `GET /metrics` expõe requisições, erros, rotas, bloqueios dos guardrails, escalonamentos, contagem de
   chamadas por ferramenta, tokens e latência p50/p95 por rota.
 - **Avaliação:** um dataset rotulado (`evals/dataset.jsonl`, os 10 cenários do desafio mais casos em português,
-  escalonamento, fora de escopo, injeção e cliente desconhecido) e um script que gera o `evals/report.md`.
+  escalonamento, fora de escopo, injeção e cliente desconhecido) e um script que gera o `evals/report.md` (e a cópia
+  que o painel mostra). O juiz LLM recebe os resultados **completos** das ferramentas de cada turno (o trace guarda só
+  resumos de 300 caracteres para os logs); uma execução inicial julgou com os resumos cortados e subestimou a groundedness.
+- **Análise das conversas** (`app/analytics.py`, SQLite no volume de armazenamento): cada requisição é guardada com o
+  resultado (só a mensagem já mascarada). O **sucesso** de uma pergunta é o 👍/👎 do usuário, quando ele avalia; senão,
+  é a **resolução automática** — respondida sem erro, escalonamento ou bloqueio, e fundamentada (fontes retornadas ou
+  dados do lojista consultados). O `GET /dashboard` mostra as perguntas mais feitas, as de menor acerto e as
+  tendências, para a equipe saber quais assuntos precisam de conteúdo ou prompts melhores.
 
 **Como eu operaria em produção**
 
@@ -308,8 +320,10 @@ avaliação canário antes de cada mudança de prompt ou de modelo.
 
 ```
 app/
-  main.py               App FastAPI: /, /chat, /health, /metrics; montagem das dependências
-  static/index.html     Console web (chat + caminho dos agentes, ferramentas, fontes, trace)
+  main.py               App FastAPI: /, /chat, /feedback, /dashboard, /analytics, /evals, /health, /metrics
+  analytics.py          Análise das conversas: registro das perguntas, avaliações, sucesso por pergunta
+  static/index.html     Console web (chat + caminho dos agentes, ferramentas, fontes, trace, 👍/👎)
+  static/dashboard.html Painel de análise
   orchestrator.py       Fluxo: guardrails → router → especialista → escalonamento → saída
   config.py             Configurações (variáveis de ambiente)
   llm.py                Interface LLMClient + implementação Gemini (novas tentativas, timeouts)

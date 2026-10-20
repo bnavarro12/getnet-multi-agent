@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     customers_file: Path = BASE_DIR / "data" / "customers.json"
     tickets_file: Path = BASE_DIR / "storage" / "tickets.json"
 
+    # --- Analytics & evaluation ---------------------------------------------
+    analytics_db_path: Path = BASE_DIR / "storage" / "analytics.db"
+    eval_report_path: Path = BASE_DIR / "storage" / "eval_report.json"
+
     # --- Observability ------------------------------------------------------
     log_level: str = "INFO"
 

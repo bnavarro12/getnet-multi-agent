@@ -9,10 +9,13 @@ from tests.conftest import make_orchestrator
 
 @pytest.fixture
 def client(settings, repo, store):
+    from app.analytics import AnalyticsStore
     app.state.orchestrator = make_orchestrator(settings, repo, store)
+    app.state.analytics = AnalyticsStore(settings.analytics_db_path)
     with TestClient(app) as c:
         yield c
     app.state.orchestrator = None
+    app.state.analytics = None
 
 
 def test_chat_returns_meaningful_json(client):

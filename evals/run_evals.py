@@ -10,7 +10,8 @@ What it measures per case and in aggregate:
   * LLM-as-judge (optional) - groundedness (no invented facts vs. tool outputs) and helpfulness, 1-5
   * latency and tokens      - operational cost of each scenario
 
-The report is written to evals/report.md and evals/report.json. Run it before every prompt or
+The report is written to evals/report.md, evals/report.json and storage/eval_report.json
+(shown on the dashboard). Run it before every prompt or
 model change and compare with the previous report (regression testing for LLM behaviour).
 """
 
@@ -20,6 +21,7 @@ import argparse
 import json
 import statistics
 import time
+from datetime import date
 from pathlib import Path
 
 from app.config import get_settings
@@ -31,6 +33,8 @@ HERE = Path(__file__).resolve().parent
 JUDGE_PROMPT = """You are grading a customer-support assistant for a payments company (Getnet).
 Given the user question, the evidence the assistant retrieved (tool outputs) and its answer, score:
 - groundedness (1-5): 5 = every factual claim is supported by the evidence or is generic advice; 1 = invents facts.
+  Judge only claims of fact (fees, dates, amounts, product features, procedures). Today's date, polite phrasing and
+  generic safety advice ("contact your bank") are not unsupported claims.
 - helpfulness (1-5): 5 = directly and fully addresses the question in the user's language; 1 = useless.
 Return JSON only."""
 
@@ -48,8 +52,10 @@ def actual_route(result: dict) -> str:
 
 
 def judge(llm, case: dict, result: dict) -> dict:
-    evidence = [s.get("result", "") for s in result["trace"]["steps"] if s["step"].startswith("tool:")]
-    prompt = (f"Question: {case['message']}\n\nEvidence:\n{json.dumps(evidence, ensure_ascii=False)[:6000]}\n\n"
+    # Full tool outputs (not the 300-character summaries kept in the trace for logging),
+    # so the judge sees everything the agent saw.
+    evidence = result.get("evidence", [])
+    prompt = (f"Today's date: {date.today().isoformat()}\n\nQuestion: {case['message']}\n\nEvidence:\n{json.dumps(evidence, ensure_ascii=False, default=str)[:30000]}\n\n"
               f"Answer:\n{result['response']}")
     resp = llm.chat(system=JUDGE_PROMPT, history=[llm.user_message(prompt)], json_schema=JUDGE_SCHEMA)
     return json.loads(resp.text)
@@ -68,7 +74,7 @@ def main() -> None:
 
     rows = []
     for case in cases:
-        result = orch.handle(case["message"], case["user_id"])
+        result = orch.handle(case["message"], case["user_id"], include_evidence=True)
         route = actual_route(result)
         tools_ok = all(t in result["tools_used"] for t in case["expected_tools"])
         text = result["response"].lower()
@@ -104,7 +110,12 @@ def main() -> None:
         summary["avg_groundedness"] = round(statistics.mean(j["groundedness"] for j in judged), 2)
         summary["avg_helpfulness"] = round(statistics.mean(j["helpfulness"] for j in judged), 2)
 
-    (HERE / "report.json").write_text(json.dumps({"summary": summary, "cases": rows}, indent=2, ensure_ascii=False))
+    report = json.dumps({"summary": summary, "cases": rows, "generated_at": time.strftime("%Y-%m-%d %H:%M")},
+                        indent=2, ensure_ascii=False)
+    (HERE / "report.json").write_text(report)
+    # Also saved on the storage volume, where the dashboard (GET /evals) reads it.
+    settings.eval_report_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.eval_report_path.write_text(report, encoding="utf-8")
     lines = ["# Evaluation report", "", "| Metric | Value |", "|---|---|"]
     lines += [f"| {k} | {v} |" for k, v in summary.items()]
     lines += ["", "| Case | Route (expected) | Tools | Route | Tools | Content | Latency |", "|---|---|---|---|---|---|---|"]

@@ -39,6 +39,10 @@ curl -s -X POST http://localhost:8000/chat \
 the route and confidence, the tools called, the sources and a step-by-step trace with latencies. It also lets you
 switch between the mock merchants and run the example scenarios with one click.
 
+**Analytics dashboard:** <http://localhost:8000/dashboard> — most asked questions, questions with the lowest success
+rate, requests per day and per route, KPIs (success rate, user approval, escalation rate, latency p50/p95) and the latest
+evaluation results. Answers can be rated 👍/👎 in the console; see §7 for how success is measured.
+
 Interactive API docs (Swagger UI): <http://localhost:8000/docs>
 
 Run all the challenge's example scenarios and print a readable summary:
@@ -227,7 +231,7 @@ Testing an LLM system means separating **what must always be true** (the workflo
 
 The `FakeLLM` (`tests/fakes.py`) implements the same interface as the Gemini client: it routes by keywords, calls the
 tool a scenario needs, and answers by echoing tool results. That makes integration tests **deterministic, offline and
-fast** (44 tests in under a second), so they can run on every commit. A failing integration test means the
+fast** (51 tests in under a second), so they can run on every commit. A failing integration test means the
 orchestration broke, not that the model had a bad day.
 
 **Comprehensive integration testing for the orchestration** extends this in four directions:
@@ -256,7 +260,14 @@ orchestration broke, not that the model had a bad day.
 - **Metrics:** `GET /metrics` exposes requests, errors, routes, guardrail blocks, escalations, tool-call counts,
   tokens and p50/p95 latency per route.
 - **Evaluation:** a labelled dataset (`evals/dataset.jsonl`, the 10 challenge scenarios plus Portuguese, escalation,
-  out-of-scope, injection and unknown-customer cases) and a runner that writes `evals/report.md`.
+  out-of-scope, injection and unknown-customer cases) and a runner that writes `evals/report.md` (and the copy the
+  dashboard shows). The LLM judge receives the **full** tool outputs of each turn (the trace only keeps 300-character
+  summaries for logging); an early run judged from the truncated summaries and under-reported groundedness.
+- **Conversation analytics** (`app/analytics.py`, SQLite on the storage volume): every request is stored with its
+  outcome (masked message only). A question's **success** is the user's 👍/👎 when rated; otherwise **automatic
+  resolution** — answered without error, escalation or guardrail block, and grounded (sources returned or the
+  merchant's data consulted). `GET /dashboard` shows the most asked questions, the lowest success rates and the
+  trends, so the team knows which topics need better content or prompts.
 
 **How I would run it in production**
 
@@ -298,8 +309,10 @@ evaluation before every prompt or model release.
 
 ```
 app/
-  main.py               FastAPI app: /, /chat, /health, /metrics; dependency wiring
-  static/index.html     Web console (chat + agent path, tools, sources, trace)
+  main.py               FastAPI app: /, /chat, /feedback, /dashboard, /analytics, /evals, /health, /metrics
+  analytics.py          Conversation analytics: request log, feedback, success rate per question
+  static/index.html     Web console (chat + agent path, tools, sources, trace, 👍/👎)
+  static/dashboard.html Analytics dashboard
   orchestrator.py       Workflow: guardrails → router → specialist → escalation → output
   config.py             Settings (environment variables)
   llm.py                LLMClient interface + Gemini implementation (retries, timeouts)

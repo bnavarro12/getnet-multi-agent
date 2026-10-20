@@ -30,6 +30,7 @@ def settings(tmp_path) -> Settings:
         gemini_api_key="test", customers_file=ROOT / "data" / "customers.json",
         tickets_file=tmp_path / "tickets.json", index_path=tmp_path / "index.json",
         retrieval_min_score=0.05, auto_ingest=False,
+        analytics_db_path=tmp_path / "analytics.db", eval_report_path=tmp_path / "eval_report.json",
     )
 
 

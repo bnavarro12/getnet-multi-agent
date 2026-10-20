@@ -63,9 +63,11 @@ class Orchestrator:
         self.metrics = metrics or Metrics()
         self.router = RouterAgent(services.llm, model=settings.router_model)
 
-    def handle(self, message: str, user_id: str) -> dict[str, Any]:
+    def handle(self, message: str, user_id: str, include_evidence: bool = False) -> dict[str, Any]:
+        """Run one message through the workflow. include_evidence=True adds the full tool outputs
+        to the response (used by the evaluation judge; the public API never sets it)."""
         trace = Trace(user_id)
-        ctx = ToolContext(user_id=user_id, trace=trace, services=self.services)
+        ctx = ToolContext(user_id=user_id, trace=trace, services=self.services, include_evidence=include_evidence)
         warnings: list[str] = []
         route_info: dict = {}
         agent_name, text, tools_used, escalated, blocked = "guardrail", "", [], False, None
@@ -143,7 +145,7 @@ class Orchestrator:
         trace = ctx.trace
         self.metrics.record(route=route_info.get("route", "blocked"), latency_ms=trace.total_ms, trace=trace,
                             escalated=escalated, blocked_reason=blocked)
-        return {
+        response = {
             "trace_id": trace.trace_id,
             "user_id": user_id,
             "response": text,
@@ -156,3 +158,6 @@ class Orchestrator:
             "guardrails": {"warnings": warnings, "blocked": blocked},
             "trace": trace.to_dict(),
         }
+        if ctx.include_evidence:
+            response["evidence"] = ctx.evidence
+        return response
