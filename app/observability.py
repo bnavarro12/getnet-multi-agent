@@ -51,6 +51,7 @@ class Trace:
         self.input_tokens = 0
         self.output_tokens = 0
         self.flags: dict[str, int] = {}
+        self._lock = threading.Lock()   # specialists may run in parallel threads on the same trace
         self._t0 = time.perf_counter()
 
     @contextmanager
@@ -63,7 +64,8 @@ class Trace:
             raise
         finally:
             s.duration_ms = round((time.perf_counter() - s.started) * 1000, 1)
-            self.spans.append(s)
+            with self._lock:
+                self.spans.append(s)
             logger.info(json.dumps({
                 "trace_id": self.trace_id, "user_id": self.user_id, "span": name,
                 "duration_ms": s.duration_ms, **s.attrs,
@@ -71,11 +73,13 @@ class Trace:
 
     def add_flag(self, name: str, count: int = 1) -> None:
         """Security/quality signals raised during the request (e.g. removed injection text)."""
-        self.flags[name] = self.flags.get(name, 0) + count
+        with self._lock:
+            self.flags[name] = self.flags.get(name, 0) + count
 
     def add_usage(self, input_tokens: int, output_tokens: int) -> None:
-        self.input_tokens += input_tokens
-        self.output_tokens += output_tokens
+        with self._lock:
+            self.input_tokens += input_tokens
+            self.output_tokens += output_tokens
 
     @property
     def total_ms(self) -> float:

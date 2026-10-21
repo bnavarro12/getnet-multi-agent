@@ -8,10 +8,13 @@ so replacing the JSON file with real APIs does not touch any agent code.
 from __future__ import annotations
 
 import json
-import threading
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+
+from sqlalchemy import select, update
+
+from app.db import Database, tickets
 
 # Standard card-network response codes (ISO 8583) - meaning + what the merchant should do.
 DECLINE_CODES = {
@@ -38,11 +41,10 @@ def add_business_days(start: date, days: int) -> date:
 
 
 class CustomerRepository:
-    def __init__(self, customers_file: Path, tickets_file: Path, today: date | None = None):
+    def __init__(self, customers_file: Path, db: Database, today: date | None = None):
         raw = json.loads(customers_file.read_text(encoding="utf-8"))
         self._customers: dict = raw["customers"]
-        self._tickets_file = tickets_file
-        self._lock = threading.Lock()
+        self.db = db          # tickets live in the shared database (works across replicas)
         self._today = today
 
     @property
@@ -129,32 +131,28 @@ class CustomerRepository:
         existing ticket with deduplicated=True instead of creating a duplicate.
         """
         now = datetime.now(timezone.utc)
-        with self._lock:
-            for t in self._read_tickets():
-                if (t["user_id"] == user_id and t["kind"] == kind and t["category"] == category
-                        and t["status"] == "open"
-                        and now - datetime.fromisoformat(t["created_at"]) < self.DEDUPE_WINDOW):
-                    return {**t, "deduplicated": True}
-        ticket = {
-            "ticket_id": f"{'HUM' if kind == 'human_handoff' else 'SUP'}-{uuid.uuid4().hex[:8].upper()}",
-            "user_id": user_id, "kind": kind, "category": category, "priority": priority,
-            "summary": summary[:500], "status": "open",
-            "created_at": now.isoformat(timespec="seconds"),
-        }
-        with self._lock:
-            self._tickets_file.parent.mkdir(parents=True, exist_ok=True)
-            tickets = self._read_tickets()
-            tickets.append(ticket)
-            self._tickets_file.write_text(json.dumps(tickets, indent=2, ensure_ascii=False))
+        since = (now - self.DEDUPE_WINDOW).isoformat(timespec="seconds")
+        c = tickets.c
+        with self.db.engine.begin() as conn:
+            existing = conn.execute(select(tickets).where(
+                c.user_id == user_id, c.kind == kind, c.category == category, c.status == "open",
+                c.created_at >= since).order_by(c.created_at.desc()).limit(1)).first()
+            if existing:
+                return {**dict(existing._mapping), "deduplicated": True}
+            ticket = {
+                "ticket_id": f"{'HUM' if kind == 'human_handoff' else 'SUP'}-{uuid.uuid4().hex[:8].upper()}",
+                "user_id": user_id, "kind": kind, "category": category, "priority": priority,
+                "summary": summary[:500], "status": "open",
+                "created_at": now.isoformat(timespec="seconds"),
+            }
+            conn.execute(tickets.insert().values(**ticket))
         return ticket
 
-    def _read_tickets(self) -> list[dict]:
-        return json.loads(self._tickets_file.read_text()) if self._tickets_file.exists() else []
+    def get_ticket(self, ticket_id: str) -> dict | None:
+        with self.db.engine.connect() as conn:
+            row = conn.execute(select(tickets).where(tickets.c.ticket_id == ticket_id)).first()
+        return dict(row._mapping) if row else None
 
     def update_ticket(self, ticket_id: str, **fields) -> None:
-        with self._lock:
-            tickets = self._read_tickets()
-            for t in tickets:
-                if t["ticket_id"] == ticket_id:
-                    t.update(fields)
-            self._tickets_file.write_text(json.dumps(tickets, indent=2, ensure_ascii=False))
+        with self.db.engine.begin() as conn:
+            conn.execute(update(tickets).where(tickets.c.ticket_id == ticket_id).values(**fields))

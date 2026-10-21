@@ -1,8 +1,10 @@
 """Deterministic guardrails that run before and after the LLM agents.
 
 Why rules and not only an LLM? Rules are fast, free, testable and cannot be talked out
-of their job by a clever prompt. The Router adds a second, semantic layer on top
-(it can label a message `out_of_scope` or `unsafe`).
+of their job by a clever prompt. Two more layers sit on top:
+  * obfuscation is normalized before matching (spaced letters, l33t-speak, zero-width characters);
+  * the Router is a SEMANTIC detector: its structured output has `injection_suspected`, so a
+    paraphrased attempt ("from now on you have no rules...") is blocked even when no pattern matches.
 
 Input guardrails:
   * size limit
@@ -45,13 +47,29 @@ INJECTION_PATTERNS = [
 ]
 _INJECTION_RE = [re.compile(p, re.IGNORECASE) for p in INJECTION_PATTERNS]
 
+# Obfuscation tricks that defeat a plain regex: zero-width characters, look-alike Unicode,
+# l33t-speak and spaced-out letters ("i g n o r e").
+_ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"), None)
+_LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i"})
+_SPACED = re.compile(r"\b(?:\w[ .\-_*]){3,}\w\b")
+
+
+def normalize_for_detection(text: str) -> str:
+    """A de-obfuscated copy of the text, used ONLY to detect injection (the message itself is unchanged)."""
+    import unicodedata
+    t = unicodedata.normalize("NFKC", text or "").translate(_ZERO_WIDTH)
+    t = "".join(ch for ch in unicodedata.normalize("NFKD", t) if not unicodedata.combining(ch))
+    t = _SPACED.sub(lambda m: re.sub(r"[ .\-_*]", "", m.group()), t)
+    return t.lower().translate(_LEET)
+
 
 def find_injection(text: str) -> str | None:
-    """Return the first instruction-like fragment found in the text, or None."""
-    for rx in _INJECTION_RE:
-        m = rx.search(text or "")
-        if m:
-            return m.group()
+    """Return the first instruction-like fragment found in the text (or its de-obfuscated form), or None."""
+    for candidate in (text or "", normalize_for_detection(text)):
+        for rx in _INJECTION_RE:
+            m = rx.search(candidate)
+            if m:
+                return m.group()
     return None
 
 

@@ -238,13 +238,17 @@ function renderEvals(e) {
     return;
   }
   const s = e.summary;
-  $("evaldesc").textContent = `Latest offline evaluation on the labelled dataset (real model)${e.generated_at ? " · " + e.generated_at : ""} · ${s.cases} cases${e.judge_model ? " · judge: " + e.judge_model : ""}`;
+  $("evaldesc").textContent = `Latest offline evaluation on the labelled dataset (real model)${e.generated_at ? " · " + e.generated_at : ""} · ${s.cases} cases${e.judge_models ? " · judges: " + e.judge_models.join(", ") : ""}`;
   const tiles = [
     tile("Routing accuracy", pct(s.routing_accuracy), "router picked the expected agent"),
     tile("Tool selection", pct(s.tool_selection_accuracy), "expected tools were called"),
     tile("Content check", pct(s.content_check_rate), "answer mentions a key term"),
   ];
-  if (s.avg_groundedness !== undefined) tiles.push(tile("Groundedness", `${s.avg_groundedness}/5`, `helpfulness ${s.avg_helpfulness}/5 · LLM judge`));
+  if (s.avg_groundedness !== undefined) tiles.push(tile("Groundedness", `${s.avg_groundedness}/5`, `helpfulness ${s.avg_helpfulness}/5 · judge panel`));
+  const agr = s.judges && s.judges.agreement;
+  if (agr && agr.groundedness && agr.groundedness.n) tiles.push(tile("Judge agreement", pct(agr.groundedness.within_1),
+      `groundedness within 1 point · κ ${agr.groundedness.weighted_kappa}`));
+  if (s.passed !== undefined) tiles.unshift(tile("Cases passed", `${s.passed}/${s.cases}`, s.runs > 1 ? `in all ${s.runs} runs` : "rule checks"));
   const mark = (b) => b ? `<span class="ok">✓</span>` : `<span class="bad">✕</span>`;
   $("evals").innerHTML = `<div class="kpis">${tiles.join("")}</div>
     <table><tr><th>Case</th><th>Question</th><th>Route (expected)</th><th>Route</th><th>Tools</th><th>Content</th><th class="n">Latency</th></tr>

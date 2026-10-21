@@ -4,7 +4,10 @@ from pathlib import Path
 import pytest
 
 from app.config import Settings
+import os
+
 from app.data.customer_repository import CustomerRepository
+from app.db import Database
 from app.memory import ConversationStore
 from app.observability import Metrics
 from app.orchestrator import Orchestrator, Services
@@ -51,15 +54,28 @@ def store() -> VectorStore:
 
 
 @pytest.fixture
-def repo(settings) -> CustomerRepository:
-    return CustomerRepository(settings.customers_file, settings.tickets_file, today=TODAY)
+def db(settings) -> Database:
+    """SQLite by default; set TEST_DATABASE_URL to run the same tests against Postgres (CI does)."""
+    url = os.environ.get("TEST_DATABASE_URL")
+    if url:
+        from app.db import metadata
+        database = Database(url)
+        metadata.drop_all(database.engine)
+        metadata.create_all(database.engine)
+        return database
+    return Database(f"sqlite:///{settings.state_db_path}")
+
+
+@pytest.fixture
+def repo(settings, db) -> CustomerRepository:
+    return CustomerRepository(settings.customers_file, db, today=TODAY)
 
 
 def make_orchestrator(settings, repo, store, llm=None, web_search=fake_web_search, memory=False) -> Orchestrator:
     llm = llm or FakeLLM()
     services = Services(llm=llm, repo=repo, retriever=Retriever(store, llm, settings),
                         web_search=web_search, today=lambda: TODAY)
-    mem = ConversationStore(settings.state_db_path) if memory else None
+    mem = ConversationStore(repo.db) if memory else None
     return Orchestrator(services, settings, Metrics(), memory=mem)
 
 
@@ -72,7 +88,7 @@ def client(settings, repo, store):
     from app.main import app
     from app.security import ApiKeyStore, RateLimiter
     app.state.orchestrator = make_orchestrator(settings, repo, store, memory=True)
-    app.state.analytics = AnalyticsStore(settings.analytics_db_path)
+    app.state.analytics = AnalyticsStore(repo.db)
     app.state.api_keys = ApiKeyStore(settings.api_keys_file)
     app.state.rate_limiter = RateLimiter(settings.rate_limit_per_minute)
     with TestClient(app, headers=AUTH_1988) as c:

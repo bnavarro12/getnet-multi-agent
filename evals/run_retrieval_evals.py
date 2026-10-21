@@ -1,4 +1,4 @@
-"""Retrieval evaluation: does search return the right pages? Dense vs. hybrid, side by side.
+"""Retrieval evaluation: does search return the right pages? Dense, hybrid and reranked modes, side by side.
 
     python -m evals.run_retrieval_evals          # needs the index and GEMINI_API_KEY (query embeddings)
 
@@ -23,7 +23,7 @@ from pathlib import Path
 from app.config import get_settings
 from app.llm import GeminiClient
 from app.observability import setup_logging
-from app.rag.retriever import Retriever
+from app.rag.retriever import MODES, Retriever
 from app.rag.store import VectorStore
 
 HERE = Path(__file__).resolve().parent
@@ -44,7 +44,7 @@ def main(k: int = 5) -> None:
     retriever = Retriever(store, llm, settings)
     cases = [json.loads(x) for x in (HERE / "retrieval_dataset.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
 
-    results = {"dense": [], "hybrid": []}
+    results = {mode: [] for mode in MODES}
     rows = []
     for case in cases:
         row = {"id": case["id"], "query": case["query"]}
@@ -54,7 +54,7 @@ def main(k: int = 5) -> None:
             results[mode].append(s)
             row[mode] = {**s, "top_urls": [h["url"] for h in hits[:3]]}
         rows.append(row)
-        time.sleep(1.0)  # query embeddings are cheap, but stay polite with per-minute quotas
+        time.sleep(1.5)  # query embeddings are cheap, but stay polite with per-minute quotas
 
     summary = {mode: {
         f"recall@{k}": round(statistics.mean(r["hit"] for r in rs), 3),
@@ -66,14 +66,18 @@ def main(k: int = 5) -> None:
               "generated_at": time.strftime("%Y-%m-%d %H:%M"), "embedding_model": settings.embedding_model}
     (HERE / "retrieval_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    lines = ["# Retrieval evaluation", "", f"{len(cases)} queries · top {k} · {len(store)} chunks · {report['generated_at']}", "",
+    best = max(summary, key=lambda m: (summary[m][f"mrr@{k}"], summary[m][f"recall@{k}"], -list(MODES).index(m)))
+    report["best_mode"] = best
+    (HERE / "retrieval_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    lines = ["# Retrieval evaluation", "", f"{len(cases)} queries · top {k} · {len(store)} chunks · {report['generated_at']}",
+             "", f"Best mode on this set (MRR, then recall): **{best}** · configured mode: **{settings.retrieval_mode}**", "",
              "| Mode | " + " | ".join(summary["dense"]) + " |", "|---|" + "---|" * len(summary["dense"])]
     for mode, m in summary.items():
         lines.append(f"| {mode} | " + " | ".join(str(v) for v in m.values()) + " |")
-    lines += ["", "| Query | Dense first hit | Hybrid first hit |", "|---|---|---|"]
+    lines += ["", "| Query | " + " | ".join(MODES) + " |", "|---|" + "---|" * len(MODES)]
     for r in rows:
         f = lambda s: f"rank {round(1 / s['rr'])}" if s["rr"] else "miss"  # noqa: E731
-        lines.append(f"| {r['query']} | {f(r['dense'])} | {f(r['hybrid'])} |")
+        lines.append(f"| {r['query']} | " + " | ".join(f(r[m]) for m in MODES) + " |")
     (HERE / "retrieval_report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2))
 

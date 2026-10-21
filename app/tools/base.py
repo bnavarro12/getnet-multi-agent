@@ -15,6 +15,7 @@ that loops or repeats itself cannot open a pile of duplicate tickets.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -39,6 +40,7 @@ class ToolContext:
 
 
 MAX_WRITES_PER_TURN = 1
+_WRITE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -56,10 +58,11 @@ class Tool:
         allowed = set(self.parameters.get("properties", {}))
         clean = {k: v for k, v in (args or {}).items() if k in allowed}  # drop hallucinated args
         if self.side_effect:
-            if ctx.writes >= MAX_WRITES_PER_TURN:
-                return {"error": "write_limit_reached",
-                        "note": "An action was already taken in this turn; do not repeat it. Report its result."}
-            ctx.writes += 1
+            with _WRITE_LOCK:
+                if ctx.writes >= MAX_WRITES_PER_TURN:
+                    return {"error": "write_limit_reached",
+                            "note": "An action was already taken in this turn; do not repeat it. Report its result."}
+                ctx.writes += 1
         return self.fn(ctx, **clean)
 
 

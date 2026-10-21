@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -38,12 +39,13 @@ from app.analytics import AnalyticsStore
 from app.config import get_settings
 from app.data.customer_repository import CustomerRepository
 from app.guardrails import mask_sensitive
+from app.db import Database
 from app.memory import ConversationStore
 from app.observability import Metrics, setup_logging
 from app.orchestrator import Orchestrator, Services
 from app.rag.retriever import Retriever
 from app.rag.store import VectorStore
-from app.security import ApiKeyStore, RateLimiter, require_staff, resolve_user
+from app.security import ApiKeyStore, DbRateLimiter, require_staff, resolve_user
 from app.tools.knowledge_tools import ddg_web_search
 
 logger = logging.getLogger(__name__)
@@ -123,15 +125,20 @@ def build_orchestrator(settings=None, llm=None, web_search=None) -> Orchestrator
     store = load_store(settings, llm)
     logger.info(json.dumps({"event": "index_loaded", "chunks": len(store), "meta": {k: v for k, v in store.meta.items() if k != "sources"}}))
 
+    db = Database(settings.db_url)
+    db.import_legacy(settings.analytics_db_path, settings.tickets_file)
+    logger.info(json.dumps({"event": "database_ready", "backend": db.backend}))
     services = Services(
         llm=llm,
-        repo=CustomerRepository(settings.customers_file, settings.tickets_file),
+        repo=CustomerRepository(settings.customers_file, db),
         retriever=Retriever(store, llm, settings),
         web_search=web_search or ddg_web_search,
     )
-    memory = ConversationStore(settings.state_db_path, settings.memory_max_turns, settings.session_ttl_hours)
-    return Orchestrator(services, settings, Metrics(settings.price_input_per_mtok_usd, settings.price_output_per_mtok_usd),
+    memory = ConversationStore(db, settings.memory_max_turns, settings.session_ttl_hours)
+    orch = Orchestrator(services, settings, Metrics(settings.price_input_per_mtok_usd, settings.price_output_per_mtok_usd),
                         memory=memory)
+    orch.db = db
+    return orch
 
 
 @asynccontextmanager
@@ -146,11 +153,20 @@ async def lifespan(app: FastAPI):
             threading.Thread(target=refresh_index, args=(app.state.orchestrator, settings), daemon=True).start()
     settings = app.state.orchestrator.s
     if not getattr(app.state, "analytics", None):
-        app.state.analytics = AnalyticsStore(settings.analytics_db_path)
+        app.state.analytics = AnalyticsStore(app.state.orchestrator.db)
+    if not getattr(app.state, "telegram", None):
+        from app.telegram import bridge_from_settings
+        bridge = bridge_from_settings(settings)
+        if bridge is not None:
+            orch = app.state.orchestrator
+            orch.on_handoff = lambda h: bridge.notify_handoff(orch.memory, h)
+            if settings.telegram_polling:
+                bridge.start(orch)
+            app.state.telegram = bridge
     if not getattr(app.state, "api_keys", None):
         app.state.api_keys = ApiKeyStore(settings.api_keys_file)
     if not getattr(app.state, "rate_limiter", None):
-        app.state.rate_limiter = RateLimiter(settings.rate_limit_per_minute)
+        app.state.rate_limiter = DbRateLimiter(app.state.orchestrator.db, settings.rate_limit_per_minute)
     yield
 
 
@@ -179,6 +195,10 @@ def _settings(request: Request):
 
 
 def _client_key(request: Request) -> str:
+    if _settings(request).trust_proxy_headers:
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -299,7 +319,9 @@ async def health(request: Request) -> dict:
     return {"status": "ok" if len(store) else "degraded", "knowledge_base_chunks": len(store),
             "index_built_at": store.meta.get("built_at"), "index_age_days": age,
             "index_stale": bool(max_age and age is not None and age > max_age),
-            "llm_circuit": breaker.state if breaker else "n/a"}
+            "llm_circuit": breaker.state if breaker else "n/a",
+            "database": orch.db.backend if getattr(orch, "db", None) else "n/a",
+            "replica": socket.gethostname()}
 
 
 @app.get("/metrics")

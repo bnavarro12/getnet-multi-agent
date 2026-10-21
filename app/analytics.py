@@ -1,7 +1,7 @@
 """Conversation analytics: which questions are asked most, and how well they are answered.
 
-Every /chat request is stored in a small SQLite database (storage/analytics.db, on the Docker
-volume) with its outcome. People can rate answers with 👍/👎 in the web console (POST /feedback).
+Every /chat request is stored in the shared database (app/db.py: SQLite on the Docker volume, or
+Postgres) with its outcome. People can rate answers with 👍/👎 in the web console (POST /feedback).
 GET /analytics aggregates it all for the dashboard at GET /dashboard.
 
 How "success" (índice de acerto) is measured for each request:
@@ -15,12 +15,13 @@ Only the masked message is stored (card numbers, CPF, passwords are already hidd
 from __future__ import annotations
 
 import re
-import sqlite3
 import statistics
-import threading
 import time
 import unicodedata
-from pathlib import Path
+
+from sqlalchemy import select, update
+
+from app.db import Database, requests
 
 SUPPORT_TOOLS = {"get_customer_profile", "get_sales_and_settlements", "get_recent_transactions",
                  "get_terminal_status", "open_support_ticket"}
@@ -47,70 +48,42 @@ def auto_resolved(result: dict) -> bool:
 
 
 class AnalyticsStore:
-    def __init__(self, db_path: Path):
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.Lock()
-        self._db = sqlite3.connect(str(db_path), check_same_thread=False)
-        self._db.execute("""
-            CREATE TABLE IF NOT EXISTS requests (
-                trace_id   TEXT PRIMARY KEY,
-                ts         REAL NOT NULL,
-                user_id    TEXT,
-                message    TEXT,
-                question   TEXT,
-                route      TEXT,
-                agent      TEXT,
-                tools      TEXT,
-                escalated  INTEGER,
-                blocked    TEXT,
-                error      INTEGER,
-                resolved   INTEGER,
-                latency_ms REAL,
-                tokens     INTEGER,
-                feedback   INTEGER   -- 1 = 👍, 0 = 👎, NULL = not rated
-            )""")
-        # v2 columns (added in place, so an existing database on the volume keeps its history)
-        cols = {r[1] for r in self._db.execute("PRAGMA table_info(requests)")}
-        for name in ("in_tokens", "out_tokens"):
-            if name not in cols:
-                self._db.execute(f"ALTER TABLE requests ADD COLUMN {name} INTEGER DEFAULT 0")
-        self._db.commit()
+    def __init__(self, db: Database):
+        self.db = db
 
     def record(self, message: str, result: dict) -> None:
         tokens = result.get("trace", {}).get("tokens", {})
-        row = (
-            result["trace_id"], time.time(), result.get("user_id"), message[:500], normalize_question(message),
-            (result.get("route") or {}).get("route") or ("blocked" if (result.get("guardrails") or {}).get("blocked") else "error"),
-            result.get("agent"), ",".join(result.get("tools_used") or []), int(bool(result.get("escalated"))),
-            (result.get("guardrails") or {}).get("blocked"), int(result.get("agent") == "error"),
-            int(auto_resolved(result)), result.get("trace", {}).get("total_ms", 0.0),
-            int(tokens.get("input", 0)) + int(tokens.get("output", 0)),
-            int(tokens.get("input", 0)), int(tokens.get("output", 0)),
+        guard = result.get("guardrails") or {}
+        row = dict(
+            trace_id=result["trace_id"], ts=time.time(), user_id=result.get("user_id"), message=message[:500],
+            question=normalize_question(message),
+            route=(result.get("route") or {}).get("route") or ("blocked" if guard.get("blocked") else "error"),
+            agent=result.get("agent"), tools=",".join(result.get("tools_used") or []),
+            escalated=int(bool(result.get("escalated"))), blocked=guard.get("blocked"),
+            error=int(result.get("agent") == "error"), resolved=int(auto_resolved(result)),
+            latency_ms=result.get("trace", {}).get("total_ms", 0.0),
+            tokens=int(tokens.get("input", 0)) + int(tokens.get("output", 0)),
+            in_tokens=int(tokens.get("input", 0)), out_tokens=int(tokens.get("output", 0)), feedback=None,
         )
-        with self._lock:
-            self._db.execute(
-                "INSERT OR REPLACE INTO requests (trace_id, ts, user_id, message, question, route, agent, tools, "
-                "escalated, blocked, error, resolved, latency_ms, tokens, in_tokens, out_tokens, feedback) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)", row)
-            self._db.commit()
+        with self.db.engine.begin() as conn:
+            conn.execute(requests.delete().where(requests.c.trace_id == row["trace_id"]))
+            conn.execute(requests.insert().values(**row))
 
     def feedback(self, trace_id: str, positive: bool, user_id: str | None = None) -> bool:
         """Rate an answer. With user_id, only the merchant who asked can rate it."""
-        with self._lock:
-            if user_id is None:
-                cur = self._db.execute("UPDATE requests SET feedback = ? WHERE trace_id = ?", (int(positive), trace_id))
-            else:
-                cur = self._db.execute("UPDATE requests SET feedback = ? WHERE trace_id = ? AND user_id = ?",
-                                       (int(positive), trace_id, user_id))
-            self._db.commit()
-            return cur.rowcount == 1
+        q = update(requests).where(requests.c.trace_id == trace_id).values(feedback=int(positive))
+        if user_id is not None:
+            q = q.where(requests.c.user_id == user_id)
+        with self.db.engine.begin() as conn:
+            return conn.execute(q).rowcount == 1
 
     def summary(self, days: float | None = None, top: int = 8) -> dict:
         since = time.time() - days * 86400 if days else 0.0
-        with self._lock:
-            rows = self._db.execute(
-                "SELECT message, question, route, agent, tools, escalated, blocked, error, resolved, latency_ms, "
-                "tokens, feedback, ts, in_tokens, out_tokens FROM requests WHERE ts >= ? ORDER BY ts", (since,)).fetchall()
+        c = requests.c
+        with self.db.engine.connect() as conn:
+            rows = conn.execute(select(c.message, c.question, c.route, c.agent, c.tools, c.escalated, c.blocked, c.error,
+                                       c.resolved, c.latency_ms, c.tokens, c.feedback, c.ts, c.in_tokens, c.out_tokens)
+                                .where(c.ts >= since).order_by(c.ts)).all()
 
         def success(r) -> int:
             return r[11] if r[11] is not None else r[8]

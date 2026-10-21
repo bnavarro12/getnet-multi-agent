@@ -8,7 +8,7 @@ from datetime import date
 
 from app.agents.base import ROLE_LABELS, ToolAgent
 from app.agents.prompts import (COMMON_RULES, ESCALATION_PROMPT, ESCALATION_SCHEMA, KNOWLEDGE_PROMPT,
-                                SUPERVISOR_PROMPT, SUPPORT_PROMPT)
+                                SUPERVISOR_PROMPT, SUPERVISOR_SCHEMA, SUPPORT_PROMPT)
 from app.llm import LLMClient
 from app.tools.base import ToolContext
 from app.tools.escalation_tools import ESCALATE_TO_HUMAN
@@ -89,7 +89,12 @@ class EscalationAgent:
 
 
 class SupervisorAgent:
-    """Merges the findings of several specialists into one answer (no tools: synthesis only)."""
+    """Observes the specialists' findings and decides: answer now, or ask one more specialist.
+
+    Output (structured): answer + missing ("none" | "support" | "knowledge") + missing_task.
+    The orchestrator runs the missing specialist (bounded by SUPERVISOR_EXTRA_STEPS) and asks again with
+    allow_more=False, so the loop always ends. No tools: the supervisor only reasons over findings.
+    """
     name = "supervisor"
 
     def __init__(self, llm: LLMClient, today: date, model: str | None = None):
@@ -97,17 +102,25 @@ class SupervisorAgent:
         self.today = today
         self.model = model
 
-    def run(self, ctx: ToolContext, message: str, language: str, findings: list[tuple[str, str]]) -> str:
-        prompt = SUPERVISOR_PROMPT.format(language=(language or "en")[:2], common=_common(self.today))
-        body = "\n\n".join(f"Findings from the {name} specialist:\n{text}" for name, text in findings)
-        with ctx.trace.span("llm:supervisor", specialists=[n for n, _ in findings]) as span:
+    def run(self, ctx: ToolContext, message: str, language: str, findings: list[tuple[str, str]],
+            allow_more: bool = True) -> dict:
+        extra = ("" if allow_more else
+                 "No more specialists can be called now: always return \"none\" and answer with what you have.")
+        prompt = SUPERVISOR_PROMPT.format(language=(language or "en")[:2], extra_rule=extra, common=_common(self.today))
+        body = "\n\n".join(f"Findings from the {name} specialist:\n{text or '(no answer)'}" for name, text in findings)
+        with ctx.trace.span("llm:supervisor", specialists=[n for n, _ in findings], allow_more=allow_more) as span:
             try:
                 resp = self.llm.chat(system=prompt, history=[self.llm.user_message(
-                    f"Customer message: {message}\n\n{body}")], model=self.model)
+                    f"Customer message: {message}\n\n{body}")], json_schema=SUPERVISOR_SCHEMA, model=self.model)
                 ctx.trace.add_usage(resp.input_tokens, resp.output_tokens)
-                span.attrs.update(input_tokens=resp.input_tokens, output_tokens=resp.output_tokens)
-                if resp.text.strip():
-                    return resp.text.strip()
+                data = json.loads(resp.text)
+                missing = data.get("missing") if allow_more else "none"
+                if missing not in ("support", "knowledge"):
+                    missing = "none"
+                span.attrs.update(input_tokens=resp.input_tokens, output_tokens=resp.output_tokens, decision=missing)
+                if (data.get("answer") or "").strip() or missing != "none":
+                    return {"answer": (data.get("answer") or "").strip(), "missing": missing,
+                            "missing_task": str(data.get("missing_task") or "")[:300]}
             except Exception as exc:  # synthesis failed: still answer with the parts
                 span.attrs["fallback"] = str(exc)[:150]
-        return "\n\n".join(text for _, text in findings)
+        return {"answer": "\n\n".join(text for _, text in findings if text), "missing": "none", "missing_task": ""}

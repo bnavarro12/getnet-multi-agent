@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     # Evaluation judge: a different (larger) model than the agents, so the system is not grading
     # itself with the same model. Set JUDGE_MODEL to another provider's model to remove all overlap.
     judge_model: str = "gemini-flash-latest"
+    # Second, independent judge from ANOTHER provider (any OpenAI-compatible API). Default: Groq's free tier.
+    # Leave the key empty to judge with Gemini only.
+    external_judge_base_url: str = "https://api.groq.com/openai/v1"
+    external_judge_api_key: str = ""
+    external_judge_model: str = "openai/gpt-oss-120b"
+    external_judge_max_chars: int = 12000   # evidence sent to it (free tiers have small tokens-per-minute limits)
     # Circuit breaker: after N consecutive LLM failures, fail fast for a cooldown period instead of
     # piling up requests on a provider that is down.
     circuit_breaker_failures: int = 5
@@ -43,6 +49,8 @@ class Settings(BaseSettings):
     max_tool_iterations: int = 5          # hard cap on tool-calling loops per agent
     router_confidence_threshold: float = 0.55  # below this -> human escalation
     max_plan_steps: int = 2               # supervisor: at most N specialists per message
+    plan_parallel: bool = True            # independent plan steps run at the same time (fan-out)
+    supervisor_extra_steps: int = 1       # after observing the findings, the supervisor may call 1 more specialist
 
     # --- RAG ----------------------------------------------------------------
     sources_file: Path = BASE_DIR / "data" / "sources.txt"
@@ -70,22 +78,37 @@ class Settings(BaseSettings):
     # Empty = those endpoints are disabled.
     admin_api_key: str = ""
     rate_limit_per_minute: int = 20       # per merchant (or per IP when unauthenticated)
+    trust_proxy_headers: bool = False     # behind a load balancer: take the client IP from X-Forwarded-For
 
-    # --- Conversation memory ------------------------------------------------
-    state_db_path: Path = BASE_DIR / "storage" / "state.db"    # sessions, turns, human hand-offs
+    # --- State (conversations, hand-offs, tickets, analytics, rate limits) -----
+    # Empty = SQLite file on the volume (state_db_path). For several replicas use Postgres, e.g.
+    # DATABASE_URL=postgresql+psycopg://getnet:secret@db:5432/getnet  (docker compose --profile postgres)
+    database_url: str = ""
+    state_db_path: Path = BASE_DIR / "storage" / "state.db"
     memory_max_turns: int = 6             # previous turns given to the agents
     session_ttl_hours: float = 24.0       # an idle session older than this starts fresh
 
     # --- Mock customer data -------------------------------------------------
     customers_file: Path = BASE_DIR / "data" / "customers.json"
-    tickets_file: Path = BASE_DIR / "storage" / "tickets.json"
+    tickets_file: Path = BASE_DIR / "storage" / "tickets.json"   # legacy (v1) file, imported once into the DB
 
     # --- Analytics & evaluation ---------------------------------------------
-    analytics_db_path: Path = BASE_DIR / "storage" / "analytics.db"
+    analytics_db_path: Path = BASE_DIR / "storage" / "analytics.db"   # legacy (v1) file, imported once into the DB
     eval_report_path: Path = BASE_DIR / "storage" / "eval_report.json"
+
+    # --- Human-in-the-loop over Telegram (optional) ---------------------------
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_allowed_user_ids: str = ""    # comma-separated Telegram user ids allowed to answer (empty = anyone in the chat)
+    telegram_polling: bool = True          # false on API replicas when a dedicated worker polls
 
     # --- Observability ------------------------------------------------------
     log_level: str = "INFO"
+
+
+    @property
+    def db_url(self) -> str:
+        return self.database_url or f"sqlite:///{self.state_db_path}"
 
 
 @lru_cache

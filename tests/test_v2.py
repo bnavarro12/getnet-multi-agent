@@ -74,11 +74,12 @@ def test_second_turn_sees_the_first_turn(client):
     assert "Conversation so far" in router_input and "yesterday's sales" in router_input
 
 
-def test_memory_survives_a_restart(settings):
-    store = ConversationStore(settings.state_db_path)
+def test_memory_survives_a_restart(db):
+    from app.db import Database
+    store = ConversationStore(db)
     sid = store.resolve_session("cliente1988", None)
     store.add_turn(sid, "user", "my machine is offline")
-    reopened = ConversationStore(settings.state_db_path)        # new process, same file on the volume
+    reopened = ConversationStore(Database(db.url))        # new process / another replica, same database
     assert reopened.resolve_session("cliente1988", sid) == sid
     assert reopened.history(sid)[0]["text"] == "my machine is offline"
 
@@ -148,13 +149,36 @@ def test_mixed_question_runs_two_specialists_and_merges(settings, repo, store):
     assert "llm:supervisor" in [s["step"] for s in r["trace"]["steps"]]
 
 
-def test_plan_stops_when_a_step_needs_a_human(settings, repo, store):
+def test_sequential_plan_stops_when_a_step_needs_a_human(settings, repo, store):
+    settings.plan_parallel = False
     plan = [{"agent": "support", "task": "a"}, {"agent": "knowledge", "task": "b"}]
     llm = FakeLLM(route_override={"route": "support", "confidence": 0.9, "language": "en", "reason": "",
                                   "reply": "", "plan": plan},
                   tool_plan=lambda text, tools: ("escalate_to_human", {"reason": "dispute"}))
     r = make_orchestrator(settings, repo, store, llm=llm).handle("x", "cliente1988")
     assert r["escalated"] and r["agent"] == "support+escalation"  # knowledge step was not run
+
+
+def test_parallel_plan_hands_off_when_any_step_needs_a_human(settings, repo, store):
+    plan = [{"agent": "support", "task": "a"}, {"agent": "knowledge", "task": "b"}]
+    llm = FakeLLM(route_override={"route": "support", "confidence": 0.9, "language": "en", "reason": "",
+                                  "reply": "", "plan": plan},
+                  tool_plan=lambda text, tools: ("escalate_to_human", {"reason": "dispute"}))
+    r = make_orchestrator(settings, repo, store, llm=llm).handle("x", "cliente1988")
+    assert r["escalated"] and "supervisor" not in r["agent"] and r["tickets"][0].startswith("HUM-")
+    assert "plan:fan_out" in [s["step"] for s in r["trace"]["steps"]]
+
+
+def test_supervisor_observes_and_calls_one_more_specialist(settings, repo, store):
+    plan = [{"agent": "support", "task": "deposits"}, {"agent": "knowledge", "task": "rule"}]
+    llm = FakeLLM(route_override={"route": "support", "confidence": 0.9, "language": "en", "reason": "",
+                                  "reply": "", "plan": plan},
+                  supervisor_missing=["support", "support"])  # asks for more twice; the budget allows one
+    r = make_orchestrator(settings, repo, store, llm=llm).handle(
+        "My money from yesterday didn't arrive, and what is the D+1 rule?", "cliente1988")
+    assert r["agent"] == "support+knowledge+support+supervisor"
+    decisions = [s.get("decision") for s in r["trace"]["steps"] if s["step"] == "llm:supervisor"]
+    assert decisions == ["support", "none"]  # second round is forced to answer: the loop always ends
 
 
 def test_router_plan_is_validated():

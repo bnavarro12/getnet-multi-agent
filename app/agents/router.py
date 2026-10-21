@@ -25,12 +25,15 @@ class RouteDecision:
     reason: str
     reply: str = ""
     plan: list[dict] = field(default_factory=list)   # [{"agent": "support", "task": "..."}, ...]
+    injection_suspected: bool = False                # semantic prompt-injection detector
 
     def to_dict(self) -> dict:
         d = {"route": self.route, "confidence": round(self.confidence, 2),
              "language": self.language, "reason": self.reason}
         if len(self.plan) > 1:
             d["plan"] = self.plan
+        if self.injection_suspected:
+            d["injection_suspected"] = True
         return d
 
 
@@ -61,7 +64,8 @@ class RouterAgent:
             confidence = max(0.0, min(1.0, float(data.get("confidence", 0))))
             return RouteDecision(route, confidence, data.get("language") or "en",
                                  data.get("reason", ""), data.get("reply", "") or "",
-                                 RouterAgent._clean_plan(route, data.get("plan")))
+                                 RouterAgent._clean_plan(route, data.get("plan")),
+                                 bool(data.get("injection_suspected", False)))
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             return RouteDecision("knowledge", 0.0, "en", f"router_parse_error: {exc}")
 

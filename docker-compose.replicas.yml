@@ -1,0 +1,68 @@
+# Production-like topology: 2 API replicas behind a load balancer, sharing one Postgres.
+#
+#   docker compose -f docker-compose.replicas.yml up -d --build
+#   docker compose -f docker-compose.replicas.yml --profile telegram up -d   # + Telegram worker
+#   curl localhost:8000/health        # "replica" changes between calls; "database": "postgresql"
+#
+# Every replica reads the same conversations, hand-offs, tickets, analytics and rate-limit counters
+# from Postgres, so any replica can answer any turn of any conversation. The knowledge base comes from
+# the committed snapshot (data/index_snapshot.json.gz).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: getnet
+      POSTGRES_PASSWORD: getnet
+      POSTGRES_DB: getnet
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U getnet"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      target: runtime
+    image: getnet-multi-agent:latest
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://getnet:getnet@db:5432/getnet
+      TRUST_PROXY_HEADERS: "true"     # client IP comes from the load balancer's X-Forwarded-For
+      INDEX_PATH: /tmp/index.json     # each replica keeps its own copy of the read-only index
+      TELEGRAM_POLLING: "false"       # replicas only SEND notifications; the worker below reads replies
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+
+  # Telegram allows one reader per bot: replies from specialists are read by this single worker.
+  telegram-worker:
+    image: getnet-multi-agent:latest
+    command: ["python", "-m", "app.telegram"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://getnet:getnet@db:5432/getnet
+      INDEX_PATH: /tmp/index.json
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["telegram"]
+
+  lb:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

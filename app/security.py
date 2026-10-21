@@ -13,8 +13,8 @@ Staff
   constant time. With no key configured those endpoints are disabled.
 
 Rate limiting
-  Sliding window per merchant (or client IP). In-memory, so it is per process: with several
-  replicas it would move to Redis or to the API gateway.
+  Per-minute counters per merchant and per client IP, stored in the shared database (DbRateLimiter), so
+  every replica enforces the same limit. RateLimiter (in-memory sliding window) is kept for tests.
 """
 
 from __future__ import annotations
@@ -95,3 +95,39 @@ class RateLimiter:
                 retry = max(1, int(self.window - (now - q[0])) + 1)
                 raise HTTPException(429, "Too many requests, please slow down.", headers={"Retry-After": str(retry)})
             q.append(now)
+
+
+class DbRateLimiter:
+    """Fixed one-minute windows counted in the shared database (works across replicas)."""
+
+    def __init__(self, db, per_minute: int):
+        self.db = db
+        self.limit = per_minute
+
+    def check(self, key: str) -> None:
+        if self.limit <= 0:
+            return
+        from sqlalchemy import delete, select, update
+        from sqlalchemy.exc import IntegrityError
+
+        from app.db import rate_limits as rl
+        now = time.time()
+        window = int(now // 60)
+        key = key[:128]
+        for _ in range(3):  # a concurrent first insert in another replica -> retry as an update
+            try:
+                with self.db.engine.begin() as conn:
+                    res = conn.execute(update(rl).where(rl.c.key == key, rl.c.window == window)
+                                       .values(count=rl.c.count + 1))
+                    if res.rowcount == 0:
+                        conn.execute(rl.insert().values(key=key, window=window, count=1))
+                        conn.execute(delete(rl).where(rl.c.window < window - 2))  # housekeeping
+                    count = conn.execute(select(rl.c.count).where(rl.c.key == key, rl.c.window == window)).scalar()
+                break
+            except IntegrityError:
+                continue
+        else:
+            return  # fail open: rate limiting must never take the API down
+        if count > self.limit:
+            retry = max(1, int(60 - (now % 60)) + 1)
+            raise HTTPException(429, "Too many requests, please slow down.", headers={"Retry-After": str(retry)})

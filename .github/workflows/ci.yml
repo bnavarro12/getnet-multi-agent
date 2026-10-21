@@ -18,6 +18,30 @@ jobs:
       - name: Run tests (fake LLM, no network, no API key)
         run: python -m pytest -o addopts="" -v
 
+  postgres:
+    name: Tests against Postgres (multi-replica state)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: getnet
+          POSTGRES_PASSWORD: getnet
+          POSTGRES_DB: getnet
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U getnet" --health-interval 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://getnet:getnet@localhost:5432/getnet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install --require-hashes -r requirements.lock -r requirements-dev.lock
+      - name: Same suite, state in Postgres
+        run: python -m pytest -o addopts="" -v
+
   docker:
     name: Docker images build
     runs-on: ubuntu-latest

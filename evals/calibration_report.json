@@ -1,0 +1,50 @@
+{
+  "external:openai/gpt-oss-120b": {
+    "groundedness": {
+      "n": 12,
+      "exact": 0.833,
+      "within_1": 0.917,
+      "mean_abs_diff": 0.417,
+      "weighted_kappa": 0.0
+    },
+    "helpfulness": {
+      "n": 12,
+      "exact": 0.75,
+      "within_1": 0.833,
+      "mean_abs_diff": 0.5,
+      "weighted_kappa": 0.488
+    }
+  },
+  "gemini:gemini-flash-latest": {
+    "groundedness": {
+      "n": 12,
+      "exact": 0.917,
+      "within_1": 0.917,
+      "mean_abs_diff": 0.333,
+      "weighted_kappa": 0.0
+    },
+    "helpfulness": {
+      "n": 12,
+      "exact": 0.583,
+      "within_1": 0.917,
+      "mean_abs_diff": 0.583,
+      "weighted_kappa": 0.435
+    }
+  },
+  "panel (mean)": {
+    "groundedness": {
+      "n": 12,
+      "exact": 0.833,
+      "within_1": 0.917,
+      "mean_abs_diff": 0.417,
+      "weighted_kappa": 0.0
+    },
+    "helpfulness": {
+      "n": 12,
+      "exact": 0.75,
+      "within_1": 0.833,
+      "mean_abs_diff": 0.417,
+      "weighted_kappa": 0.609
+    }
+  }
+}

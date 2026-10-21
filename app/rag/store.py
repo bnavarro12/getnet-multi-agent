@@ -9,6 +9,7 @@ pgvector or Qdrant when the corpus grows - swapping it is a one-file change.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -71,7 +72,10 @@ class VectorStore:
             "chunks": [asdict(c) for c in self.chunks],
             "vectors": self.vectors.round(6).tolist(),
         }
-        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        # atomic: write a temp file, then rename - a reader (or another replica) never sees half a file
+        tmp = path.with_suffix(path.suffix + f".tmp{os.getpid()}")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
 
     @classmethod
     def load(cls, path: Path) -> "VectorStore":

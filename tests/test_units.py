@@ -116,9 +116,12 @@ def test_unknown_customer(repo):
 
 
 def test_tickets_are_persisted(repo, settings):
+    from app.data.customer_repository import CustomerRepository
+    from app.db import Database
     t = repo.create_ticket("cliente1988", "terminal", "Machine offline", kind="human_handoff")
     assert t["ticket_id"].startswith("HUM-")
-    assert json.loads(settings.tickets_file.read_text())[0]["ticket_id"] == t["ticket_id"]
+    other_replica = CustomerRepository(settings.customers_file, Database(repo.db.url))
+    assert other_replica.get_ticket(t["ticket_id"])["summary"] == "Machine offline"
 
 # ---------------------------------------------------------------- router parsing
 
