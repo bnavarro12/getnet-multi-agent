@@ -1,4 +1,7 @@
-FROM python:3.13-slim
+# Multi-stage build:
+#   runtime (default) - only what the service needs: app, data, evals, scripts. No tests, no pytest.
+#   test              - runtime + test suite + pytest:  docker compose run --rm tests
+FROM python:3.13-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,18 +9,26 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Dependencies first: this layer is cached until requirements.txt changes.
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Dependencies first (cached until the lockfile changes). --require-hashes: every package must match
+# the sha256 pinned in requirements.lock, so a tampered or re-published package fails the build.
+COPY requirements.lock .
+RUN pip install --require-hashes -r requirements.lock
 
 COPY app ./app
 COPY data ./data
 COPY evals ./evals
-COPY tests ./tests
 COPY scripts ./scripts
-COPY pytest.ini .
 
-# Run as a non-root user; /app/storage holds the vector index and tickets (mounted as a volume).
+
+FROM base AS test
+COPY requirements-dev.lock pytest.ini ./
+RUN pip install --require-hashes -r requirements-dev.lock
+COPY tests ./tests
+CMD ["python", "-m", "pytest", "-o", "addopts="]
+
+
+FROM base AS runtime
+# Run as a non-root user; /app/storage holds the index, tickets, conversations (mounted as a volume).
 RUN useradd --create-home appuser && mkdir -p /app/storage && chown -R appuser /app
 USER appuser
 

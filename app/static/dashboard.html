@@ -95,6 +95,9 @@
       <option value="30">Last 30 days</option>
       <option value="">All time</option>
     </select>
+    <input id="staffkey" type="password" placeholder="Staff key (ADMIN_API_KEY)" autocomplete="off"
+           style="padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:13px;width:190px">
+    <a class="btn" href="/agent">👤 Agent inbox</a>
     <a class="btn" href="/">← Console</a>
   </div>
 </header>
@@ -193,7 +196,9 @@ function render(d) {
     tile("Success rate", pct(k.success_rate), "rated 👍, or resolved automatically"),
     tile("User approval", pct(k.approval_rate), `${k.ratings} rating${k.ratings === 1 ? "" : "s"}`),
     tile("Escalated to a human", pct(k.escalation_rate), `errors: ${pct(k.error_rate)}`),
-    tile("Latency p50 / p95", `${secs(k.latency_p50_ms)}`, `p95 ${secs(k.latency_p95_ms)} · ~${k.avg_tokens} tokens/question`),
+    tile("Latency p50", `${secs(k.latency_p50_ms)}`, `p95 ${secs(k.latency_p95_ms)} · p99 ${secs(k.latency_p99_ms)}`),
+    tile("Est. cost / question", k.estimated_cost_usd_per_request ? `$${k.estimated_cost_usd_per_request.toFixed(5)}` : "–",
+         `~${k.avg_tokens} tokens/question · list prices`),
   ].join("");
 
   const maxAsks = Math.max(0, ...d.most_asked.map(q => q.asks));
@@ -233,7 +238,7 @@ function renderEvals(e) {
     return;
   }
   const s = e.summary;
-  $("evaldesc").textContent = `Latest offline evaluation on the labelled dataset (real model)${e.generated_at ? " · " + e.generated_at : ""} · ${s.cases} cases`;
+  $("evaldesc").textContent = `Latest offline evaluation on the labelled dataset (real model)${e.generated_at ? " · " + e.generated_at : ""} · ${s.cases} cases${e.judge_model ? " · judge: " + e.judge_model : ""}`;
   const tiles = [
     tile("Routing accuracy", pct(s.routing_accuracy), "router picked the expected agent"),
     tile("Tool selection", pct(s.tool_selection_accuracy), "expected tools were called"),
@@ -248,13 +253,21 @@ function renderEvals(e) {
     </table>`;
 }
 
+// Staff key: kept only in this tab's session storage (never in the page or the URL).
+const KEY_SLOT = "getnet-staff-key";
+try { $("staffkey").value = sessionStorage.getItem(KEY_SLOT) || ""; } catch (e) {}
+$("staffkey").onchange = () => { try { sessionStorage.setItem(KEY_SLOT, $("staffkey").value); } catch (e) {} load(); };
+
+async function getJSON(url) {
+  const r = await fetch(url, { headers: { "X-Admin-Key": $("staffkey").value } });
+  if (r.status === 401 || r.status === 403) throw new Error("enter a valid staff key (ADMIN_API_KEY) at the top right");
+  return r.json();
+}
+
 async function load() {
   const days = $("days").value;
   try {
-    const [a, e] = await Promise.all([
-      fetch("/analytics" + (days ? `?days=${days}` : "")).then(r => r.json()),
-      fetch("/evals").then(r => r.json()),
-    ]);
+    const [a, e] = await Promise.all([getJSON("/analytics" + (days ? `?days=${days}` : "")), getJSON("/evals")]);
     render(a); renderEvals(e);
   } catch (err) {
     $("kpis").innerHTML = `<p class="empty">Could not load analytics: ${esc(err.message)}</p>`;

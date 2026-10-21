@@ -5,6 +5,7 @@ import pytest
 
 from app.config import Settings
 from app.data.customer_repository import CustomerRepository
+from app.memory import ConversationStore
 from app.observability import Metrics
 from app.orchestrator import Orchestrator, Services
 from app.rag.retriever import Retriever
@@ -13,6 +14,11 @@ from tests.fakes import FakeLLM, fake_web_search, hash_embed
 
 ROOT = Path(__file__).resolve().parent.parent
 TODAY = date(2026, 10, 20)  # a Tuesday -> "yesterday" is Monday
+STAFF_KEY = "staff-test-key"
+KEY_1988 = "demo-key-cliente1988"      # demo keys from data/api_keys.json
+KEY_2024 = "demo-key-cliente2024"
+AUTH_1988 = {"Authorization": f"Bearer {KEY_1988}"}
+STAFF = {"X-Admin-Key": STAFF_KEY}
 
 KB = [
     ("Maquininhas Getnet", "https://site.getnet.com.br/todas-as-maquininhas",
@@ -31,6 +37,8 @@ def settings(tmp_path) -> Settings:
         tickets_file=tmp_path / "tickets.json", index_path=tmp_path / "index.json",
         retrieval_min_score=0.05, auto_ingest=False,
         analytics_db_path=tmp_path / "analytics.db", eval_report_path=tmp_path / "eval_report.json",
+        state_db_path=tmp_path / "state.db", index_snapshot_path=tmp_path / "none.json.gz",
+        admin_api_key=STAFF_KEY, rate_limit_per_minute=1000, auth_enabled=True,
     )
 
 
@@ -47,11 +55,30 @@ def repo(settings) -> CustomerRepository:
     return CustomerRepository(settings.customers_file, settings.tickets_file, today=TODAY)
 
 
-def make_orchestrator(settings, repo, store, llm=None, web_search=fake_web_search) -> Orchestrator:
+def make_orchestrator(settings, repo, store, llm=None, web_search=fake_web_search, memory=False) -> Orchestrator:
     llm = llm or FakeLLM()
     services = Services(llm=llm, repo=repo, retriever=Retriever(store, llm, settings),
                         web_search=web_search, today=lambda: TODAY)
-    return Orchestrator(services, settings, Metrics())
+    mem = ConversationStore(settings.state_db_path) if memory else None
+    return Orchestrator(services, settings, Metrics(), memory=mem)
+
+
+@pytest.fixture
+def client(settings, repo, store):
+    """API client authenticated as cliente1988, with memory enabled (like production)."""
+    from fastapi.testclient import TestClient
+
+    from app.analytics import AnalyticsStore
+    from app.main import app
+    from app.security import ApiKeyStore, RateLimiter
+    app.state.orchestrator = make_orchestrator(settings, repo, store, memory=True)
+    app.state.analytics = AnalyticsStore(settings.analytics_db_path)
+    app.state.api_keys = ApiKeyStore(settings.api_keys_file)
+    app.state.rate_limiter = RateLimiter(settings.rate_limit_per_minute)
+    with TestClient(app, headers=AUTH_1988) as c:
+        yield c
+    for name in ("orchestrator", "analytics", "api_keys", "rate_limiter"):
+        setattr(app.state, name, None)
 
 
 @pytest.fixture

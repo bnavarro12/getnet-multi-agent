@@ -7,8 +7,9 @@ validated, never parsed out of free text. A small/fast model is enough for this.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from app.agents.base import format_input
 from app.agents.prompts import ROUTER_PROMPT, ROUTER_SCHEMA
 from app.llm import LLMClient
 from app.tools.base import ToolContext
@@ -23,10 +24,14 @@ class RouteDecision:
     language: str
     reason: str
     reply: str = ""
+    plan: list[dict] = field(default_factory=list)   # [{"agent": "support", "task": "..."}, ...]
 
     def to_dict(self) -> dict:
-        return {"route": self.route, "confidence": round(self.confidence, 2),
-                "language": self.language, "reason": self.reason}
+        d = {"route": self.route, "confidence": round(self.confidence, 2),
+             "language": self.language, "reason": self.reason}
+        if len(self.plan) > 1:
+            d["plan"] = self.plan
+        return d
 
 
 class RouterAgent:
@@ -36,9 +41,9 @@ class RouterAgent:
         self.llm = llm
         self.model = model
 
-    def route(self, ctx: ToolContext, message: str) -> RouteDecision:
-        with ctx.trace.span("llm:router") as span:
-            resp = self.llm.chat(system=ROUTER_PROMPT, history=[self.llm.user_message(message)],
+    def route(self, ctx: ToolContext, message: str, history: list[dict] | None = None) -> RouteDecision:
+        with ctx.trace.span("llm:router", history_turns=len(history or [])) as span:
+            resp = self.llm.chat(system=ROUTER_PROMPT, history=[self.llm.user_message(format_input(message, history))],
                                  json_schema=ROUTER_SCHEMA, model=self.model)
             ctx.trace.add_usage(resp.input_tokens, resp.output_tokens)
             decision = self._parse(resp.text)
@@ -55,6 +60,23 @@ class RouterAgent:
                 raise ValueError(f"invalid route {route!r}")
             confidence = max(0.0, min(1.0, float(data.get("confidence", 0))))
             return RouteDecision(route, confidence, data.get("language") or "en",
-                                 data.get("reason", ""), data.get("reply", "") or "")
+                                 data.get("reason", ""), data.get("reply", "") or "",
+                                 RouterAgent._clean_plan(route, data.get("plan")))
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             return RouteDecision("knowledge", 0.0, "en", f"router_parse_error: {exc}")
+
+    @staticmethod
+    def _clean_plan(route: str, raw) -> list[dict]:
+        """Validate the plan: known specialists only, no repeated agent, starts with the route."""
+        if route not in ("knowledge", "support"):
+            return []
+        steps, seen = [], set()
+        for step in raw if isinstance(raw, list) else []:
+            agent = (step or {}).get("agent") if isinstance(step, dict) else None
+            if agent in ("knowledge", "support") and agent not in seen:
+                seen.add(agent)
+                steps.append({"agent": agent, "task": str(step.get("task", ""))[:300]})
+        if not steps or steps[0]["agent"] != route:
+            steps = [s for s in steps if s["agent"] != route]
+            steps.insert(0, {"agent": route, "task": ""})
+        return steps

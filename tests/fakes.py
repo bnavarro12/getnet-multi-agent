@@ -54,9 +54,21 @@ class FakeLLM:
         return [hash_embed(t) for t in texts]
 
     # --- generation ----------------------------------------------------------
+    @staticmethod
+    def current_message(text: str) -> str:
+        """The agents receive 'Conversation so far ... Current customer message: X'; rules look at X."""
+        if "Current customer message: " in text:
+            return text.split("Current customer message: ", 1)[1].split("\n\n", 1)[0]
+        return text
+
     def chat(self, *, system, history, tools=None, json_schema=None, model=None):
-        self.calls.append({"system": system[:40], "tools": [t["name"] for t in tools or []], "schema": bool(json_schema)})
-        user_text = next(m["text"] for m in history if m.get("role") == "user")
+        full_text = next(m["text"] for m in history if m.get("role") == "user")
+        self.calls.append({"system": system[:40], "tools": [t["name"] for t in tools or []], "schema": bool(json_schema),
+                           "user": full_text, "model": model})
+        user_text = self.current_message(full_text)
+
+        if system.startswith("You are the Supervisor"):
+            return LLMResponse(text=f"Combined answer. {full_text[:1500]}", input_tokens=300, output_tokens=80)
 
         if json_schema is ROUTER_SCHEMA:
             data = self.route_override or self.classify(user_text)
@@ -93,7 +105,7 @@ class FakeLLM:
             route = "knowledge"
         reply = "Hello! How can I help?" if route == "greeting" else (
             "I can only help with Getnet topics." if route == "out_of_scope" else "")
-        return {"route": route, "confidence": 0.9, "language": "en", "reason": "keyword rule", "reply": reply}
+        return {"route": route, "confidence": 0.9, "language": "en", "reason": "keyword rule", "reply": reply, "plan": []}
 
     @staticmethod
     def default_tool_plan(text: str, available: list[str]):

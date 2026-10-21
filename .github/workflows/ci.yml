@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    name: Offline test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install locked dependencies (hash-checked)
+        run: pip install --require-hashes -r requirements.lock -r requirements-dev.lock
+      - name: Run tests (fake LLM, no network, no API key)
+        run: python -m pytest -o addopts="" -v
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run the test image
+        run: |
+          docker build --target test -t getnet-multi-agent:test .
+          docker run --rm getnet-multi-agent:test
+      - name: Build the runtime image and check it has no tests
+        run: |
+          docker build --target runtime -t getnet-multi-agent:ci .
+          docker run --rm getnet-multi-agent:ci sh -c 'test ! -d /app/tests && ! python -c "import pytest"'

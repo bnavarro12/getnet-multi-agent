@@ -6,6 +6,11 @@ A Tool = name + description + JSON schema (what the LLM sees) + a Python functio
 Security principle: the `user_id` is injected from the authenticated request context,
 never taken from the LLM's arguments. The model cannot be tricked into reading another
 merchant's data, because no tool accepts a user_id parameter.
+
+Read vs. write tools: tools that change something outside the conversation (opening a ticket)
+are marked `side_effect=True`. The run-time policy allows at most MAX_WRITES_PER_TURN writes per
+request, and the write itself is idempotent (see CustomerRepository.create_ticket), so a model
+that loops or repeats itself cannot open a pile of duplicate tickets.
 """
 
 from __future__ import annotations
@@ -29,6 +34,11 @@ class ToolContext:
     # Returned only on request, e.g. to the evaluation judge.
     evidence: list[dict] = field(default_factory=list)
     include_evidence: bool = False
+    session_id: str | None = None
+    writes: int = 0                    # side-effecting tool calls made in this turn
+
+
+MAX_WRITES_PER_TURN = 1
 
 
 @dataclass
@@ -37,6 +47,7 @@ class Tool:
     description: str
     parameters: dict
     fn: Callable[..., dict]
+    side_effect: bool = False          # True = writes/changes data (needs idempotency and limits)
 
     def schema(self) -> dict:
         return {"name": self.name, "description": self.description, "parameters": self.parameters}
@@ -44,6 +55,11 @@ class Tool:
     def run(self, ctx: ToolContext, args: dict) -> dict:
         allowed = set(self.parameters.get("properties", {}))
         clean = {k: v for k, v in (args or {}).items() if k in allowed}  # drop hallucinated args
+        if self.side_effect:
+            if ctx.writes >= MAX_WRITES_PER_TURN:
+                return {"error": "write_limit_reached",
+                        "note": "An action was already taken in this turn; do not repeat it. Report its result."}
+            ctx.writes += 1
         return self.fn(ctx, **clean)
 
 

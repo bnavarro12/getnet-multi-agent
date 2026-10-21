@@ -1,7 +1,10 @@
 .env
 .git
+.github
 storage
 __pycache__
 *.pyc
 .pytest_cache
 .venv
+*.md
+!evals/*.md

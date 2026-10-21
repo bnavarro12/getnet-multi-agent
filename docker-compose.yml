@@ -1,14 +1,24 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      target: runtime          # production image: no tests inside
     image: getnet-multi-agent:latest
     container_name: getnet-multi-agent
     env_file: .env
     ports:
       - "8000:8000"
     volumes:
-      - storage:/app/storage   # vector index + tickets survive restarts/rebuilds
+      - storage:/app/storage   # index, tickets, conversations, analytics survive restarts/rebuilds
     restart: unless-stopped
+
+  # Offline test suite in its own image:  docker compose run --rm tests
+  tests:
+    build:
+      context: .
+      target: test
+    image: getnet-multi-agent:test
+    profiles: ["test"]         # not started by "docker compose up"
 
 volumes:
   storage:

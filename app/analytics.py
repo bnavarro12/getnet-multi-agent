@@ -69,6 +69,11 @@ class AnalyticsStore:
                 tokens     INTEGER,
                 feedback   INTEGER   -- 1 = 👍, 0 = 👎, NULL = not rated
             )""")
+        # v2 columns (added in place, so an existing database on the volume keeps its history)
+        cols = {r[1] for r in self._db.execute("PRAGMA table_info(requests)")}
+        for name in ("in_tokens", "out_tokens"):
+            if name not in cols:
+                self._db.execute(f"ALTER TABLE requests ADD COLUMN {name} INTEGER DEFAULT 0")
         self._db.commit()
 
     def record(self, message: str, result: dict) -> None:
@@ -80,14 +85,23 @@ class AnalyticsStore:
             (result.get("guardrails") or {}).get("blocked"), int(result.get("agent") == "error"),
             int(auto_resolved(result)), result.get("trace", {}).get("total_ms", 0.0),
             int(tokens.get("input", 0)) + int(tokens.get("output", 0)),
+            int(tokens.get("input", 0)), int(tokens.get("output", 0)),
         )
         with self._lock:
-            self._db.execute("INSERT OR REPLACE INTO requests VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)", row)
+            self._db.execute(
+                "INSERT OR REPLACE INTO requests (trace_id, ts, user_id, message, question, route, agent, tools, "
+                "escalated, blocked, error, resolved, latency_ms, tokens, in_tokens, out_tokens, feedback) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)", row)
             self._db.commit()
 
-    def feedback(self, trace_id: str, positive: bool) -> bool:
+    def feedback(self, trace_id: str, positive: bool, user_id: str | None = None) -> bool:
+        """Rate an answer. With user_id, only the merchant who asked can rate it."""
         with self._lock:
-            cur = self._db.execute("UPDATE requests SET feedback = ? WHERE trace_id = ?", (int(positive), trace_id))
+            if user_id is None:
+                cur = self._db.execute("UPDATE requests SET feedback = ? WHERE trace_id = ?", (int(positive), trace_id))
+            else:
+                cur = self._db.execute("UPDATE requests SET feedback = ? WHERE trace_id = ? AND user_id = ?",
+                                       (int(positive), trace_id, user_id))
             self._db.commit()
             return cur.rowcount == 1
 
@@ -96,7 +110,7 @@ class AnalyticsStore:
         with self._lock:
             rows = self._db.execute(
                 "SELECT message, question, route, agent, tools, escalated, blocked, error, resolved, latency_ms, "
-                "tokens, feedback, ts FROM requests WHERE ts >= ? ORDER BY ts", (since,)).fetchall()
+                "tokens, feedback, ts, in_tokens, out_tokens FROM requests WHERE ts >= ? ORDER BY ts", (since,)).fetchall()
 
         def success(r) -> int:
             return r[11] if r[11] is not None else r[8]
@@ -153,7 +167,10 @@ class AnalyticsStore:
                 "error_rate": round(sum(r[7] for r in rows) / total, 3) if total else None,
                 "latency_p50_ms": pct(latencies, 0.5),
                 "latency_p95_ms": pct(latencies, 0.95),
+                "latency_p99_ms": pct(latencies, 0.99),
                 "avg_tokens": round(statistics.mean(r[10] for r in rows)) if rows else 0,
+                "avg_input_tokens": round(statistics.mean((r[13] or 0) for r in rows)) if rows else 0,
+                "avg_output_tokens": round(statistics.mean((r[14] or 0) for r in rows)) if rows else 0,
             },
             "most_asked": most_asked,
             "lowest_success": lowest,

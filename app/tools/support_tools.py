@@ -36,6 +36,8 @@ def _open_ticket(ctx: ToolContext, category: str, summary: str, priority: str = 
         return NOT_FOUND
     ticket = ctx.services.repo.create_ticket(ctx.user_id, category, summary, priority)
     ctx.tickets.append(ticket["ticket_id"])
+    if ticket.get("deduplicated"):
+        return {"ticket": ticket, "note": "An open ticket for this issue already exists; it was reused, not duplicated."}
     return {"ticket": ticket}
 
 
@@ -90,4 +92,5 @@ OPEN_SUPPORT_TICKET = Tool(
         "required": ["category", "summary"],
     },
     fn=_open_ticket,
+    side_effect=True,
 )

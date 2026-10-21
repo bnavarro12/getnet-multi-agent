@@ -1,21 +1,8 @@
 """API contract tests (FastAPI TestClient, fake LLM injected)."""
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app.main import app
-from tests.conftest import make_orchestrator
-
-
-@pytest.fixture
-def client(settings, repo, store):
-    from app.analytics import AnalyticsStore
-    app.state.orchestrator = make_orchestrator(settings, repo, store)
-    app.state.analytics = AnalyticsStore(settings.analytics_db_path)
-    with TestClient(app) as c:
-        yield c
-    app.state.orchestrator = None
-    app.state.analytics = None
+from tests.conftest import STAFF
 
 
 def test_chat_returns_meaningful_json(client):
@@ -48,4 +35,6 @@ def test_health_and_metrics(client):
     h = client.get("/health").json()
     assert h["status"] == "ok" and h["knowledge_base_chunks"] == 3
     client.post("/chat", json={"message": "Can I sell through WhatsApp?", "user_id": "cliente1988"})
-    assert client.get("/metrics").json()["requests_total"] == 1
+    m = client.get("/metrics", headers=STAFF).json()
+    assert m["requests_total"] == 1
+    assert "p99" in m["latency_ms"]["knowledge"] and m["estimated_cost_usd"]["total"] > 0

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from app.config import Settings
+from app.resilience import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class GeminiClient:
         self._types = types
         self._s = settings
         self._no_thinking_models: set[str] = set()
+        self.breaker = CircuitBreaker(settings.circuit_breaker_failures, settings.circuit_breaker_cooldown_s)
         self._client = genai.Client(
             api_key=settings.gemini_api_key,
             http_options=types.HttpOptions(timeout=settings.llm_timeout_s * 1000),
@@ -80,6 +82,9 @@ class GeminiClient:
 
     # -- generation -----------------------------------------------------------
     def chat(self, *, system, history, tools=None, json_schema=None, model=None) -> LLMResponse:
+        return self.breaker.call(lambda: self._chat(system, history, tools, json_schema, model))
+
+    def _chat(self, system, history, tools, json_schema, model) -> LLMResponse:
         t = self._types
         config = t.GenerateContentConfig(
             system_instruction=system,

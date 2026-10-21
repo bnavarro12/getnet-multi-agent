@@ -1,0 +1,17 @@
+{
+  "_comment": "sha256(api_key) -> merchant. Demo keys (fictitious, documented in the README): demo-key-cliente1988, demo-key-cliente2024, demo-key-unknown. Generate a hash with: python -c \"import hashlib;print(hashlib.sha256(b'KEY').hexdigest())\"",
+  "keys": {
+    "6fd5c478c7321aadb3f4191261737c73393e8fa3727bfb8d3d65735ef64d6e9f": {
+      "user_id": "cliente1988",
+      "label": "demo key for cliente1988"
+    },
+    "9b3095ea6a2739794c4e0a068468d6c2f56257d802c5e64e96ab1fe6513e493d": {
+      "user_id": "cliente2024",
+      "label": "demo key for cliente2024"
+    },
+    "308f9bac3d303b3782e62b4d5feaacb841e3da4e3e53abf720025e4b7d9144ea": {
+      "user_id": "unknown_user",
+      "label": "demo key for unknown_user"
+    }
+  }
+}

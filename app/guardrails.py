@@ -13,6 +13,12 @@ Input guardrails:
 Output guardrails:
   * mask any sensitive data the model may echo back
   * never leak the system prompt
+
+Indirect prompt injection (content the agents READ, not what the user types):
+  * web pages, knowledge-base chunks and web-search results are wrapped as untrusted data
+    (`wrap_untrusted`), and instruction-like sentences inside them are removed first;
+  * every agent prompt says tool results are data, never instructions (prompts.COMMON_RULES);
+  * the same patterns are applied at ingestion, so poisoned chunks never enter the index.
 """
 
 from __future__ import annotations
@@ -31,7 +37,42 @@ INJECTION_PATTERNS = [
     r"you are now (DAN|in developer mode|jailbroken)",
     r"\bjailbreak\b",
     r"act as (an? )?(unfiltered|unrestricted)",
+    r"forget (all |your |the )?(previous |prior )?(instructions|rules|guidelines)",
+    r"esque[cç]a (todas )?(as |suas |as suas )?(instru[cç][oõ]es|regras)",
+    r"(new|updated) (system )?instructions?\s*:",
+    r"novas instru[cç][oõ]es\s*:",
+    r"\bsystem prompt\b",
 ]
+_INJECTION_RE = [re.compile(p, re.IGNORECASE) for p in INJECTION_PATTERNS]
+
+
+def find_injection(text: str) -> str | None:
+    """Return the first instruction-like fragment found in the text, or None."""
+    for rx in _INJECTION_RE:
+        m = rx.search(text or "")
+        if m:
+            return m.group()
+    return None
+
+
+def strip_injections(text: str) -> tuple[str, int]:
+    """Remove sentences that look like instructions to the model (indirect injection)."""
+    removed = 0
+    parts = re.split(r"(?<=[.!?\n])\s+", text or "")
+    kept = []
+    for part in parts:
+        if find_injection(part):
+            removed += 1
+            kept.append("[removed: instruction-like text]")
+        else:
+            kept.append(part)
+    return " ".join(kept) if removed else (text or ""), removed
+
+
+def wrap_untrusted(text: str, source: str) -> tuple[str, int]:
+    """Mark external content as data. Returns (wrapped_text, removed_fragments)."""
+    clean, removed = strip_injections(text)
+    return f"<untrusted_content source=\"{source}\">\n{clean}\n</untrusted_content>", removed
 
 # Card numbers: 13-19 digits, optionally separated by spaces/dashes; validated with Luhn.
 CARD_RE = re.compile(r"\b(?:\d[ -]?){13,19}\b")
@@ -95,10 +136,8 @@ def check_input(message: str) -> GuardrailResult:
     if len(message) > MAX_MESSAGE_CHARS:
         return GuardrailResult(False, message[:MAX_MESSAGE_CHARS], reason="message_too_long")
 
-    lowered = message.lower()
-    for pattern in INJECTION_PATTERNS:
-        if re.search(pattern, lowered):
-            return GuardrailResult(False, message, reason="prompt_injection")
+    if find_injection(message):
+        return GuardrailResult(False, message, reason="prompt_injection")
 
     masked, found = mask_sensitive(message)
     warnings = [f"sensitive_data_masked:{kind}" for kind in found]
@@ -116,6 +155,11 @@ BLOCK_MESSAGES = {
     "prompt_injection": (
         "I can't help with that request. I'm Getnet's virtual assistant and can help with "
         "Getnet products, your sales, receivables and card machines."
+    ),
+    "other_account": (
+        "I can only help with the account you are logged in with. For security, I can't access or share "
+        "another merchant's data. / Só posso ajudar com a conta em que você está logado: por segurança, não "
+        "acesso nem compartilho dados de outro lojista da Getnet."
     ),
     "unsafe": (
         "I can't help with that. If you have a question about Getnet products or your account, "

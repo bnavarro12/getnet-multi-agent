@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human Agent Inbox</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f5f3; --panel: #fcfcfb; --ink: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e4e2de;
+    --accent: #e3001b; --accent-ink: #ffffff; --chip: #f0eeea; --high: #d03b3b; --normal: #2a78d6; --human: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #141413; --panel: #1a1a19; --ink: #f0efec; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+      --chip: #262624; --high: #f87171; --normal: #60a5fa; --human: #fbbf24;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #141413; --panel: #1a1a19; --ink: #f0efec; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --chip: #262624; --high: #f87171; --normal: #60a5fa; --human: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 24px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--accent-ink);
+          display: grid; place-items: center; font-weight: 800; }
+  header h1 { font-size: 16px; margin: 0; } header p { margin: 0; font-size: 12px; color: var(--muted); }
+  .spacer { flex: 1; }
+  input, select, .btn, textarea { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+                                  color: var(--ink); font: inherit; font-size: 13px; }
+  .btn { cursor: pointer; text-decoration: none; } .btn:hover { border-color: var(--accent); }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 18px; padding: 20px 24px; max-width: 1240px; margin: 0 auto; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .card h2 { font-size: 15px; margin: 0 0 10px; }
+  .item { display: block; width: 100%; text-align: left; border: 1px solid var(--line); background: transparent; color: var(--ink);
+          border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; font: inherit; }
+  .item:hover, .item.active { border-color: var(--accent); }
+  .item .top { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+  .item .sum { font-size: 13px; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .pill { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+  .pill.high { color: var(--high); } .pill.normal { color: var(--normal); }
+  .meta { font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
+  .turn { padding: 8px 12px; border-radius: 10px; margin-bottom: 8px; white-space: pre-wrap; background: var(--chip); }
+  .turn .who { font-size: 11.5px; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
+  .turn.user { border-left: 3px solid var(--normal); }
+  .turn.human_agent { border-left: 3px solid var(--human); }
+  textarea { width: 100%; min-height: 90px; resize: vertical; margin-top: 8px; }
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .primary { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+  .primary:disabled { opacity: .5; cursor: wait; }
+  .empty { color: var(--muted); font-size: 13px; }
+  .result { margin-top: 12px; border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; white-space: pre-wrap; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 16px; } header { padding: 14px 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">G</div>
+  <div><h1>Human agent inbox</h1><p>Cases the assistant handed off · your reply goes back into the customer's conversation</p></div>
+  <div class="spacer"></div>
+  <select id="status">
+    <option value="open" selected>Open</option>
+    <option value="answered">Answered</option>
+    <option value="closed">Closed</option>
+    <option value="">All</option>
+  </select>
+  <input id="staffkey" type="password" placeholder="Staff key (ADMIN_API_KEY)" autocomplete="off" style="width:190px">
+  <a class="btn" href="/dashboard">📊 Dashboard</a>
+  <a class="btn" href="/">← Console</a>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Hand-offs</h2>
+    <div id="list"><p class="empty">Loading…</p></div>
+  </section>
+  <section class="card" id="detail"><p class="empty">Select a case to see the conversation and reply.</p></section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const WHO = { user: "Customer", assistant: "Assistant", human_agent: "Human specialist" };
+const KEY_SLOT = "getnet-staff-key";
+let cases = [], current = null;
+
+try { $("staffkey").value = sessionStorage.getItem(KEY_SLOT) || ""; } catch (e) {}
+$("staffkey").onchange = () => { try { sessionStorage.setItem(KEY_SLOT, $("staffkey").value); } catch (e) {} load(); };
+$("status").onchange = load;
+const headers = () => ({ "Content-Type": "application/json", "X-Admin-Key": $("staffkey").value });
+
+async function load() {
+  try {
+    const r = await fetch(`/handoffs?status=${$("status").value}`, { headers: headers() });
+    if (r.status === 401 || r.status === 403) throw new Error("Enter a valid staff key (ADMIN_API_KEY) at the top right.");
+    cases = (await r.json()).handoffs;
+    renderList();
+    // Refresh the open case, but never wipe a reply that is being typed.
+    const typing = $("reply") && ($("reply").value || document.activeElement === $("reply"));
+    if (current && !typing) { const c = cases.find(x => x.ticket_id === current); if (c) renderDetail(c); }
+  } catch (e) { $("list").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
+}
+
+function renderList() {
+  if (!cases.length) { $("list").innerHTML = `<p class="empty">No hand-offs with this status.</p>`; return; }
+  $("list").innerHTML = cases.map(c => `
+    <button class="item ${c.ticket_id === current ? "active" : ""}" data-id="${esc(c.ticket_id)}">
+      <div class="top"><b>${esc(c.ticket_id)}</b><span class="pill ${esc(c.priority)}">${esc(c.priority)}</span>
+        <span>${esc(c.category)}</span><span>· ${esc(c.user_id)}</span></div>
+      <div class="sum">${esc(c.summary)}</div>
+    </button>`).join("");
+  document.querySelectorAll(".item").forEach(b => b.onclick = () => {
+    current = b.dataset.id; renderList(); renderDetail(cases.find(x => x.ticket_id === current));
+  });
+}
+
+function renderDetail(c) {
+  const turns = c.conversation.map(t => `<div class="turn ${esc(t.role)}"><div class="who">${WHO[t.role] || esc(t.role)}</div>${esc(t.text)}</div>`).join("");
+  const canReply = c.status === "open";
+  $("detail").innerHTML = `
+    <h2>${esc(c.ticket_id)} · ${esc(c.user_id)}</h2>
+    <div class="meta">Priority <b>${esc(c.priority)}</b> · ${esc(c.category)} · status ${esc(c.status)} · reason: ${esc(c.reason)}<br>
+      Summary: ${esc(c.summary)}</div>
+    ${turns || `<p class="empty">No conversation stored.</p>`}
+    ${canReply ? `
+      <label for="reply" class="meta">Your reply (the assistant delivers it to the customer and continues the conversation)</label>
+      <textarea id="reply" placeholder="e.g. We blocked the charge and the refund of R$ 89,90 will be credited in 2 business days."></textarea>
+      <div class="actions">
+        <label class="meta" style="margin:0"><input type="checkbox" id="close"> Close the case (solved)</label>
+        <button class="primary" id="sendreply">Send reply</button>
+      </div>
+      <div id="result"></div>` : `<p class="meta">Answered: ${esc(c.human_reply || "")}</p>`}`;
+  if (canReply) $("sendreply").onclick = () => sendReply(c.ticket_id);
+}
+
+async function sendReply(id) {
+  const text = $("reply").value.trim();
+  if (!text) return;
+  $("sendreply").disabled = true;
+  try {
+    const r = await fetch(`/handoffs/${encodeURIComponent(id)}/reply`, { method: "POST", headers: headers(),
+      body: JSON.stringify({ reply: text, close: $("close").checked }) });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || r.status);
+    $("result").innerHTML = `<div class="result"><b>Sent to the customer (${esc(body.agent)} agent):</b>\n${esc(body.message_to_customer)}</div>`;
+    setTimeout(load, 1500);
+  } catch (e) {
+    $("result").innerHTML = `<div class="result">Could not send: ${esc(e.message)}</div>`;
+    $("sendreply").disabled = false;
+  }
+}
+
+load();
+setInterval(load, 10000);
+</script>
+</body>
+</html>

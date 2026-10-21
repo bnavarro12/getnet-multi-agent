@@ -10,6 +10,7 @@ import time
 import urllib.request
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
+API_KEY = "demo-key-cliente1988"   # demo key (data/api_keys.json): the server derives user_id from it
 
 SCENARIOS = [
     "What's the difference between the Get Clássica and the Get Smart?",
@@ -27,7 +28,7 @@ SCENARIOS = [
 
 def post(message: str, user_id: str = "cliente1988") -> dict:
     req = urllib.request.Request(f"{BASE}/chat", data=json.dumps({"message": message, "user_id": user_id}).encode(),
-                                 headers={"Content-Type": "application/json"})
+                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"})
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read())
 

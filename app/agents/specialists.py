@@ -1,13 +1,14 @@
-"""Agents 2, 3 and 4: Knowledge, Customer Support and Human Escalation."""
+"""Agents 2, 3 and 4: Knowledge, Customer Support and Human Escalation, plus the Supervisor
+that merges the answers when the Router's plan needs more than one specialist."""
 
 from __future__ import annotations
 
 import json
 from datetime import date
 
-from app.agents.base import ToolAgent
+from app.agents.base import ROLE_LABELS, ToolAgent
 from app.agents.prompts import (COMMON_RULES, ESCALATION_PROMPT, ESCALATION_SCHEMA, KNOWLEDGE_PROMPT,
-                                SUPPORT_PROMPT)
+                                SUPERVISOR_PROMPT, SUPPORT_PROMPT)
 from app.llm import LLMClient
 from app.tools.base import ToolContext
 from app.tools.escalation_tools import ESCALATE_TO_HUMAN
@@ -55,10 +56,12 @@ class EscalationAgent:
         self.today = today
         self.model = model
 
-    def run(self, ctx: ToolContext, message: str, language: str, reason: str, partial_answer: str = "") -> dict:
+    def run(self, ctx: ToolContext, message: str, language: str, reason: str, partial_answer: str = "",
+            history: list[dict] | None = None) -> dict:
         lang = (language or "en")[:2]
         prompt = ESCALATION_PROMPT.format(language=lang, common=_common(self.today))
-        case = (f"User message: {message}\nEscalation reason: {reason}\n"
+        earlier = "\n".join(f"{ROLE_LABELS.get(t['role'], t['role'])}: {t['text'][:500]}" for t in history or [])
+        case = (f"Earlier conversation:\n{earlier or '(none)'}\n\nUser message: {message}\nEscalation reason: {reason}\n"
                 f"Assistant work so far: {partial_answer or '(none)'}")
         with ctx.trace.span("llm:escalation", reason=reason) as span:
             try:
@@ -80,4 +83,31 @@ class EscalationAgent:
         template = data.get("user_message") or self.FALLBACK_MESSAGES.get(lang, self.FALLBACK_MESSAGES["en"])
         if "{ticket_id}" not in template:
             template += " (protocol: {ticket_id})"
-        return {"text": template.replace("{ticket_id}", ticket["ticket_id"]), "ticket": ticket}
+        return {"text": template.replace("{ticket_id}", ticket["ticket_id"]), "ticket": ticket,
+                "summary": data.get("summary", reason), "priority": data.get("priority", "normal"),
+                "category": data.get("category", "other")}
+
+
+class SupervisorAgent:
+    """Merges the findings of several specialists into one answer (no tools: synthesis only)."""
+    name = "supervisor"
+
+    def __init__(self, llm: LLMClient, today: date, model: str | None = None):
+        self.llm = llm
+        self.today = today
+        self.model = model
+
+    def run(self, ctx: ToolContext, message: str, language: str, findings: list[tuple[str, str]]) -> str:
+        prompt = SUPERVISOR_PROMPT.format(language=(language or "en")[:2], common=_common(self.today))
+        body = "\n\n".join(f"Findings from the {name} specialist:\n{text}" for name, text in findings)
+        with ctx.trace.span("llm:supervisor", specialists=[n for n, _ in findings]) as span:
+            try:
+                resp = self.llm.chat(system=prompt, history=[self.llm.user_message(
+                    f"Customer message: {message}\n\n{body}")], model=self.model)
+                ctx.trace.add_usage(resp.input_tokens, resp.output_tokens)
+                span.attrs.update(input_tokens=resp.input_tokens, output_tokens=resp.output_tokens)
+                if resp.text.strip():
+                    return resp.text.strip()
+            except Exception as exc:  # synthesis failed: still answer with the parts
+                span.attrs["fallback"] = str(exc)[:150]
+        return "\n\n".join(text for _, text in findings)

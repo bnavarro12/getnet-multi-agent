@@ -49,6 +49,11 @@ class CustomerRepository:
     def today(self) -> date:
         return self._today or date.today()
 
+    def other_accounts_mentioned(self, text: str, user_id: str) -> list[str]:
+        """Merchant ids written in the message that are not the authenticated merchant's own."""
+        lowered = (text or "").lower()
+        return [uid for uid in self._customers if uid != user_id and uid.lower() in lowered]
+
     def exists(self, user_id: str) -> bool:
         return user_id in self._customers
 
@@ -113,17 +118,43 @@ class CustomerRepository:
         c = self._customers.get(user_id)
         return None if not c else c["terminals"]
 
+    DEDUPE_WINDOW = timedelta(hours=24)
+
     def create_ticket(self, user_id: str, category: str, summary: str, priority: str = "normal",
                       kind: str = "support") -> dict:
+        """Open a ticket - idempotently.
+
+        Business key: one OPEN ticket per merchant + kind + category in a 24-hour window. A repeated
+        request (the model calling the tool twice, the user asking again, a client retry) returns the
+        existing ticket with deduplicated=True instead of creating a duplicate.
+        """
+        now = datetime.now(timezone.utc)
+        with self._lock:
+            for t in self._read_tickets():
+                if (t["user_id"] == user_id and t["kind"] == kind and t["category"] == category
+                        and t["status"] == "open"
+                        and now - datetime.fromisoformat(t["created_at"]) < self.DEDUPE_WINDOW):
+                    return {**t, "deduplicated": True}
         ticket = {
             "ticket_id": f"{'HUM' if kind == 'human_handoff' else 'SUP'}-{uuid.uuid4().hex[:8].upper()}",
             "user_id": user_id, "kind": kind, "category": category, "priority": priority,
             "summary": summary[:500], "status": "open",
-            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "created_at": now.isoformat(timespec="seconds"),
         }
         with self._lock:
             self._tickets_file.parent.mkdir(parents=True, exist_ok=True)
-            tickets = json.loads(self._tickets_file.read_text()) if self._tickets_file.exists() else []
+            tickets = self._read_tickets()
             tickets.append(ticket)
             self._tickets_file.write_text(json.dumps(tickets, indent=2, ensure_ascii=False))
         return ticket
+
+    def _read_tickets(self) -> list[dict]:
+        return json.loads(self._tickets_file.read_text()) if self._tickets_file.exists() else []
+
+    def update_ticket(self, ticket_id: str, **fields) -> None:
+        with self._lock:
+            tickets = self._read_tickets()
+            for t in tickets:
+                if t["ticket_id"] == ticket_id:
+                    t.update(fields)
+            self._tickets_file.write_text(json.dumps(tickets, indent=2, ensure_ascii=False))

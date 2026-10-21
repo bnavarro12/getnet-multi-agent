@@ -51,12 +51,16 @@ class VectorStore:
         self.vectors = new if self.vectors.size == 0 else np.vstack([self.vectors, new])
         self.chunks.extend(chunks)
 
+    def scores(self, query_vector: list[float]) -> np.ndarray:
+        """Cosine similarity of the query against every chunk (vectors are unit-norm)."""
+        q = np.asarray(query_vector, dtype=np.float32)
+        q = q / (np.linalg.norm(q) or 1.0)
+        return self.vectors @ q
+
     def search(self, query_vector: list[float], top_k: int = 5) -> list[SearchHit]:
         if not self.chunks:
             return []
-        q = np.asarray(query_vector, dtype=np.float32)
-        q = q / (np.linalg.norm(q) or 1.0)
-        scores = self.vectors @ q                    # cosine similarity (vectors are unit-norm)
+        scores = self.scores(query_vector)
         order = np.argsort(-scores)[:top_k]
         return [SearchHit(self.chunks[i], float(scores[i])) for i in order]
 
@@ -71,7 +75,11 @@ class VectorStore:
 
     @classmethod
     def load(cls, path: Path) -> "VectorStore":
-        data = json.loads(path.read_text(encoding="utf-8"))
+        if path.suffix == ".gz":  # committed snapshot (data/index_snapshot.json.gz)
+            import gzip
+            data = json.loads(gzip.decompress(path.read_bytes()).decode("utf-8"))
+        else:
+            data = json.loads(path.read_text(encoding="utf-8"))
         chunks = [Chunk(**c) for c in data["chunks"]]
         vectors = np.asarray(data["vectors"], dtype=np.float32)
         return cls(chunks, vectors, data.get("meta", {}))

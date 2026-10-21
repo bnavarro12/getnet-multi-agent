@@ -27,6 +27,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import Settings, get_settings
+from app.guardrails import find_injection
 from app.rag.store import Chunk, VectorStore
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,14 @@ def build_index(settings: Settings, llm) -> VectorStore:
         unique.setdefault(key, c)
     chunks = list(unique.values())
 
+    # Indirect prompt injection defence at ingestion: a page that contains instructions aimed at
+    # the model ("ignore previous instructions...") never enters the knowledge base.
+    poisoned = [c for c in chunks if find_injection(c.text)]
+    if poisoned:
+        logger.warning(json.dumps({"event": "ingest_dropped_injection", "chunks": len(poisoned),
+                                   "urls": sorted({c.url for c in poisoned})[:10]}))
+        chunks = [c for c in chunks if c not in poisoned]
+
     store = VectorStore(meta={
         "built_at": datetime.now(timezone.utc).isoformat(),
         "pages": len(pages),
@@ -184,10 +193,24 @@ def build_index(settings: Settings, llm) -> VectorStore:
     return store
 
 
+def export_snapshot(settings: Settings) -> None:
+    """Write the current index as a gzip snapshot that can be committed (deterministic first start)."""
+    import gzip
+    data = settings.index_path.read_bytes()
+    settings.index_snapshot_path.write_bytes(gzip.compress(data, compresslevel=9))
+    logger.info(json.dumps({"event": "snapshot_written", "path": str(settings.index_snapshot_path),
+                            "bytes": settings.index_snapshot_path.stat().st_size}))
+
+
 if __name__ == "__main__":
+    import sys
+
     from app.llm import GeminiClient
     from app.observability import setup_logging
 
     s = get_settings()
     setup_logging(s.log_level)
-    build_index(s, GeminiClient(s))
+    if "--export-snapshot" in sys.argv:   # python -m app.rag.ingest --export-snapshot
+        export_snapshot(s)
+    else:
+        build_index(s, GeminiClient(s))

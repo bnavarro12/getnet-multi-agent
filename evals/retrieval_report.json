@@ -1,0 +1,386 @@
+{
+  "summary": {
+    "dense": {
+      "recall@5": 0.929,
+      "mrr@5": 0.875,
+      "precision@5": 0.643,
+      "empty_rate": 0
+    },
+    "hybrid": {
+      "recall@5": 0.929,
+      "mrr@5": 0.821,
+      "precision@5": 0.571,
+      "empty_rate": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "r01",
+      "query": "diferença entre Get Clássica e Get Smart",
+      "dense": {
+        "hit": false,
+        "rr": 0.0,
+        "precision": 0.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/getstore",
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/get-tap"
+        ]
+      },
+      "hybrid": {
+        "hit": false,
+        "rr": 0.0,
+        "precision": 0.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/get-tap",
+          "https://site.getnet.com.br/getstore"
+        ]
+      }
+    },
+    {
+      "id": "r02",
+      "query": "receber vendas via Pix na maquininha",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/pix",
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/ofertas"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/pix",
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/todas-as-maquininhas"
+        ]
+      }
+    },
+    {
+      "id": "r03",
+      "query": "como funciona a antecipação de recebíveis",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      }
+    },
+    {
+      "id": "r04",
+      "query": "parcelar vendas no crediário",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/crediario",
+          "https://site.getnet.com.br/crediario",
+          "https://site.getnet.com.br/crediario"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/crediario",
+          "https://site.getnet.com.br/crediario",
+          "https://site.getnet.com.br/crediario"
+        ]
+      }
+    },
+    {
+      "id": "r05",
+      "query": "vender pelo WhatsApp com link de pagamento",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/link-de-pagamento",
+          "https://site.getnet.com.br/link-de-pagamento",
+          "https://site.getnet.com.br/produtos-digitais"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/link-de-pagamento",
+          "https://site.getnet.com.br/link-de-pagamento",
+          "https://site.getnet.com.br/link-de-pagamento"
+        ]
+      }
+    },
+    {
+      "id": "r06",
+      "query": "abrir conta digital Getnet",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/conta-digital",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/produtos-digitais"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 0.5,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/conta-digital",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      }
+    },
+    {
+      "id": "r07",
+      "query": "aceitar cartão pelo celular com Get Tap",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas/get-tap",
+          "https://site.getnet.com.br/duvidas/get-tap",
+          "https://site.getnet.com.br/duvidas/get-tap"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas/get-tap",
+          "https://site.getnet.com.br/duvidas/get-tap",
+          "https://site.getnet.com.br/get-tap"
+        ]
+      }
+    },
+    {
+      "id": "r08",
+      "query": "empréstimo para minha empresa",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/emprestimo",
+          "https://site.getnet.com.br/emprestimo",
+          "https://site.getnet.com.br/emprestimo"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/emprestimo",
+          "https://site.getnet.com.br/emprestimo",
+          "https://site.getnet.com.br/emprestimo"
+        ]
+      }
+    },
+    {
+      "id": "r09",
+      "query": "cobrança de assinaturas e pagamentos recorrentes",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/pagamentos-recorrentes",
+          "https://site.getnet.com.br/pagamentos-recorrentes",
+          "https://site.getnet.com.br/pagamentos-recorrentes"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/pagamentos-recorrentes",
+          "https://site.getnet.com.br/getcheckout",
+          "https://site.getnet.com.br/getcheckout"
+        ]
+      }
+    },
+    {
+      "id": "r10",
+      "query": "taxas personalizadas para o meu negócio",
+      "dense": {
+        "hit": true,
+        "rr": 0.25,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/produtos-digitais",
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br/get-tap"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/taxas",
+          "https://site.getnet.com.br/ofertas",
+          "https://site.getnet.com.br/get-tap"
+        ]
+      }
+    },
+    {
+      "id": "r11",
+      "query": "checkout para loja online e-commerce",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/getcheckout",
+          "https://site.getnet.com.br/getcheckout",
+          "https://site.getnet.com.br/getcheckout"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/getcheckout",
+          "https://site.getnet.com.br/getcheckout",
+          "https://site.getnet.com.br/getcheckout"
+        ]
+      }
+    },
+    {
+      "id": "r12",
+      "query": "converter moedas estrangeiras",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/conversor-de-moedas",
+          "https://site.getnet.com.br/conversor-de-moedas",
+          "https://site.getnet.com.br/imprensa"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 0.5,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/conversor-de-moedas",
+          "https://site.getnet.com.br/conversor-de-moedas"
+        ]
+      }
+    },
+    {
+      "id": "r13",
+      "query": "minha maquininha não conecta, o que fazer",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/conta-digital",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 0.5,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/recargas"
+        ]
+      }
+    },
+    {
+      "id": "r14",
+      "query": "Getnet international payment solutions for merchants",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en",
+          "https://www.getnet.net/en/our-solutions/value-added-solutions",
+          "https://www.getnet.net/en/our-solutions/online-payments"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/our-solutions/online-payments",
+          "https://www.getnet.net/en/partners",
+          "https://www.getnet.net/en"
+        ]
+      }
+    }
+  ],
+  "chunks": 334,
+  "k": 5,
+  "generated_at": "2026-10-21 19:38",
+  "embedding_model": "gemini-embedding-001"
+}

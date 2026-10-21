@@ -22,6 +22,21 @@ class AgentResult:
     hit_iteration_limit: bool = False
 
 
+ROLE_LABELS = {"user": "Customer", "assistant": "Assistant", "human_agent": "Human specialist"}
+
+
+def format_input(message: str, history: list[dict] | None = None, task: str | None = None) -> str:
+    """Build the text an agent receives: earlier turns (memory) + the current message (+ plan task)."""
+    parts = []
+    if history:
+        lines = [f"{ROLE_LABELS.get(t['role'], t['role'])}: {t['text'][:800]}" for t in history]
+        parts.append("Conversation so far (oldest first, for context only):\n" + "\n".join(lines))
+    parts.append(f"Current customer message: {message}" if history or task else message)
+    if task:
+        parts.append(f"Your task in this plan: {task}")
+    return "\n\n".join(parts)
+
+
 def _summarize(result: dict, limit: int = 300) -> str:
     return json.dumps(result, ensure_ascii=False, default=str)[:limit]
 

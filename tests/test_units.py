@@ -136,3 +136,10 @@ def test_router_parse_garbage_becomes_low_confidence():
 def test_router_rejects_unknown_route_and_clamps_confidence():
     assert RouterAgent._parse('{"route":"hack","confidence":1}').confidence == 0.0
     assert RouterAgent._parse('{"route":"knowledge","confidence":7,"language":"en","reason":"","reply":""}').confidence == 1.0
+
+
+def test_eval_tool_check_is_not_vacuous():
+    from evals.run_evals import route_matches, tools_match
+    assert tools_match([], []) and not tools_match([], ["search_knowledge_base"])  # refusals must call nothing
+    assert tools_match(["web_search"], ["web_search", "search_knowledge_base"])
+    assert route_matches(["unsafe", "out_of_scope"], "unsafe") and not route_matches("support", "knowledge")

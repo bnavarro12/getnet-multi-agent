@@ -1,11 +1,7 @@
 """Analytics: storage, grouping of questions, success rate and the dashboard endpoints."""
 
-import pytest
-from fastapi.testclient import TestClient
-
-from app.analytics import AnalyticsStore, auto_resolved, normalize_question
-from app.main import app
-from tests.conftest import make_orchestrator
+from app.analytics import auto_resolved, normalize_question
+from tests.conftest import STAFF
 
 
 def test_questions_are_grouped_ignoring_case_accents_and_punctuation():
@@ -23,16 +19,6 @@ def test_auto_resolution_rules():
     assert not auto_resolved({**base, "guardrails": {"blocked": "prompt_injection"}, "route": {}})
 
 
-@pytest.fixture
-def client(settings, repo, store):
-    app.state.orchestrator = make_orchestrator(settings, repo, store)
-    app.state.analytics = AnalyticsStore(settings.analytics_db_path)
-    with TestClient(app) as c:
-        yield c
-    app.state.orchestrator = None
-    app.state.analytics = None
-
-
 def ask(client, message):
     return client.post("/chat", json={"message": message, "user_id": "cliente1988"}).json()
 
@@ -43,7 +29,7 @@ def test_dashboard_aggregates_questions_and_feedback(client):
     b = ask(client, "Write me a poem about the sea")          # refused -> not a success
     assert client.post("/feedback", json={"trace_id": a["trace_id"], "rating": "down"}).json() == {"ok": True}
 
-    data = client.get("/analytics").json()
+    data = client.get("/analytics", headers=STAFF).json()
     assert data["kpis"]["requests"] == 3 and data["kpis"]["ratings"] == 1
     top = data["most_asked"][0]
     assert top["asks"] == 2 and top["down"] == 1 and top["success_rate"] == 0.5  # 👎 overrides auto-resolution
@@ -55,7 +41,7 @@ def test_dashboard_aggregates_questions_and_feedback(client):
 
 def test_sensitive_data_is_never_stored(client):
     ask(client, "My card 4111 1111 1111 1111 was declined at my machine")
-    data = client.get("/analytics").json()
+    data = client.get("/analytics", headers=STAFF).json()
     assert "4111 1111 1111 1111" not in str(data)
 
 
@@ -64,12 +50,16 @@ def test_feedback_validation(client):
     assert client.post("/feedback", json={"trace_id": "x", "rating": "maybe"}).status_code == 422
 
 
-def test_dashboard_page_and_evals_endpoint(client, settings, monkeypatch):
-    import app.main as main
-    monkeypatch.setattr(main, "get_settings", lambda: settings)
+def test_dashboard_page_and_evals_endpoint(client, settings):
     r = client.get("/dashboard")
     assert r.status_code == 200 and "Most asked questions" in r.text
-    assert client.get("/evals").json() == {"available": False}
+    assert client.get("/evals", headers=STAFF).json() == {"available": False}
     settings.eval_report_path.parent.mkdir(parents=True, exist_ok=True)
     settings.eval_report_path.write_text('{"summary": {"cases": 1}, "cases": []}')
-    assert client.get("/evals").json()["available"] is True
+    assert client.get("/evals", headers=STAFF).json()["available"] is True
+
+
+def test_only_the_merchant_who_asked_can_rate_an_answer(client):
+    a = ask(client, "Can I sell through WhatsApp?")
+    other = {"Authorization": "Bearer demo-key-cliente2024"}
+    assert client.post("/feedback", json={"trace_id": a["trace_id"], "rating": "down"}, headers=other).status_code == 404
