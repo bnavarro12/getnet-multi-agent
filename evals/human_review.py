@@ -3,6 +3,7 @@
     python -m evals.human_review label            # shows each judged answer, you type your scores (resumable)
     python -m evals.human_review label --n 20     # label at most 20 cases
     python -m evals.human_review score            # agreement between you and each judge -> calibration_report.md
+    python -m evals.human_review score --report evals/calibration_run_report.json   # labels of an archived run
 
 How it works
   1. `label` reads the last evals/report.json and shows, for each judged case, the question, an excerpt of
@@ -43,8 +44,11 @@ RUBRIC = """Rubric (same as the judges):
                     user's language; 1 = useless. Not finding the information lowers THIS score."""
 
 
+REPORT = HERE / "report.json"
+
+
 def load_report() -> dict:
-    path = HERE / "report.json"
+    path = REPORT
     if not path.exists():
         raise SystemExit("No evals/report.json yet: run  python -m evals.run_evals --judge  first.")
     return json.loads(path.read_text(encoding="utf-8"))
@@ -180,7 +184,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=["label", "score"])
     parser.add_argument("--n", type=int, default=100, help="max cases to label in this session")
+    parser.add_argument("--report", default="", help="eval report the labels refer to (default: evals/report.json)")
     args = parser.parse_args()
+    if args.report:
+        global REPORT
+        REPORT = Path(args.report)
     label(args.n) if args.command == "label" else score()
 
 

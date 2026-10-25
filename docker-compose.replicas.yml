@@ -12,7 +12,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: getnet
-      POSTGRES_PASSWORD: getnet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: getnet
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -29,7 +29,7 @@ services:
     image: getnet-multi-agent:latest
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+psycopg://getnet:getnet@db:5432/getnet
+      DATABASE_URL: postgresql+psycopg://getnet:${POSTGRES_PASSWORD}@db:5432/getnet
       TRUST_PROXY_HEADERS: "true"     # client IP comes from the load balancer's X-Forwarded-For
       INDEX_PATH: /tmp/index.json     # each replica keeps its own copy of the read-only index
       TELEGRAM_POLLING: "false"       # replicas only SEND notifications; the worker below reads replies
@@ -46,7 +46,7 @@ services:
     command: ["python", "-m", "app.telegram"]
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+psycopg://getnet:getnet@db:5432/getnet
+      DATABASE_URL: postgresql+psycopg://getnet:${POSTGRES_PASSWORD}@db:5432/getnet
       INDEX_PATH: /tmp/index.json
     depends_on:
       db:

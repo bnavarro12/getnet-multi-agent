@@ -37,10 +37,28 @@ class ToolContext:
     include_evidence: bool = False
     session_id: str | None = None
     writes: int = 0                    # side-effecting tool calls made in this turn
+    summary: str = ""                  # rolling summary of the turns older than the memory window
+    approval_request: dict | None = None   # a risky action the agent asked for: runs only after a human approves
+    # Plan steps run in parallel threads on the SAME context: every shared write goes through
+    # these methods, which hold one lock (check-then-append stays atomic, e.g. source de-duplication).
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def add_source(self, source: dict) -> None:
+        with self.lock:
+            if source.get("url") not in {s.get("url") for s in self.sources}:
+                self.sources.append(source)
+
+    def add_evidence(self, item: dict) -> None:
+        with self.lock:
+            self.evidence.append(item)
+
+    def add_ticket(self, ticket_id: str) -> None:
+        with self.lock:
+            if ticket_id not in self.tickets:
+                self.tickets.append(ticket_id)
 
 
 MAX_WRITES_PER_TURN = 1
-_WRITE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -58,7 +76,7 @@ class Tool:
         allowed = set(self.parameters.get("properties", {}))
         clean = {k: v for k, v in (args or {}).items() if k in allowed}  # drop hallucinated args
         if self.side_effect:
-            with _WRITE_LOCK:
+            with ctx.lock:
                 if ctx.writes >= MAX_WRITES_PER_TURN:
                     return {"error": "write_limit_reached",
                             "note": "An action was already taken in this turn; do not repeat it. Report its result."}

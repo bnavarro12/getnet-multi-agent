@@ -6,10 +6,14 @@
 
 What it measures per case and in aggregate:
   * routing accuracy   - did the Router pick the expected route (and, if labelled, the expected agents)?
-  * tool selection     - were the expected tools called? Cases that expect NO tools (refusals, blocks,
-                         hand-offs) fail if any tool is called.
+  * tool selection     - were the expected tools called? Cases labelled with an empty list (refusals, blocks,
+                         hand-offs) fail if any tool is called; a case with no `expected_tools` key is one where
+                         the tool choice is not what is being measured (see the `note` in the dataset).
   * content check      - the answer mentions an expected key term and none of the forbidden ones
                          (e.g. a card number the user typed must never come back).
+  * numeric grounding  - deterministic, no LLM: every number in the answer (price, fee, amount, date) must
+                         appear in the evidence or in the question. A number that appears nowhere is flagged
+                         (unsupported_numbers) - this catches an invented price even when the judges miss it.
   * LLM judges         - groundedness (no invented facts vs. the full tool outputs) and helpfulness, 1-5,
                          from a PANEL of judges of different providers, with their agreement (evals/judges.py).
   * per category       - knowledge, support, memory, mixed, adversarial... so a regression is easy to locate.
@@ -24,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
 import time
 from pathlib import Path
@@ -46,8 +51,10 @@ def actual_route(result: dict) -> str:
     return (result["route"] or {}).get("route", "error")
 
 
-def tools_match(expected: list[str], used: list[str]) -> bool:
-    if not expected:  # refusals / blocks / hand-offs: calling any tool is wrong
+def tools_match(expected: list[str] | None, used: list[str]) -> bool:
+    if expected is None:  # not labelled: the case is about the answer, not about which tool produced it
+        return True
+    if not expected:      # labelled empty = refusals / blocks / hand-offs: calling any tool is wrong
         return not used
     return all(t in used for t in expected)
 
@@ -63,16 +70,48 @@ def content_matches(case: dict, text: str) -> bool:
     return ok and not any(t.lower() in low for t in case.get("must_not_mention", []))
 
 
+NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def _canon(token: str) -> str:
+    """'1.234,56' / '1,234.56' / '79,90' / '79.9' -> one canonical form, so formats don't matter."""
+    if "," in token and "." in token:
+        dec = "," if token.rfind(",") > token.rfind(".") else "."
+        token = token.replace("." if dec == "," else ",", "").replace(dec, ".")
+    elif "," in token or "." in token:   # one kind of separator: "1.234" = thousands, "79,90" / "4.5" = decimal
+        sep = "," if "," in token else "."
+        head, _, tail = token.rpartition(sep)
+        token = token.replace(sep, "") if sep == "." and len(tail) == 3 else head.replace(sep, "") + "." + tail
+    try:
+        return f"{float(token):g}"
+    except ValueError:
+        return token
+
+
+def unsupported_numbers(answer: str, evidence: list, question: str) -> list[str]:
+    """Numbers in the answer that appear neither in the evidence nor in the question (single digits ignored:
+    "2 business days", "D+1" are too common to be informative)."""
+    known = {_canon(t) for t in NUMBER.findall(json.dumps(evidence, ensure_ascii=False, default=str) + " " + question)}
+    return sorted({t for t in NUMBER.findall(answer) if len(t.replace(".", "").replace(",", "")) > 1
+                   and _canon(t) not in known})
+
+
 def category(case: dict) -> str:
     return case.get("category") or CATEGORY_BY_PREFIX.get(case["id"].split("-")[0], "other")
 
 
 def run_case(orch, case: dict, delay: float) -> tuple[dict, dict]:
-    session_id = None
+    session_id, memory = None, []
     for earlier in case.get("turns", []):  # multi-turn: build the conversation first
-        session_id = orch.handle(earlier, case["user_id"], session_id=session_id)["session_id"]
+        previous = orch.handle(earlier, case["user_id"], session_id=session_id)
+        session_id = previous["session_id"]
+        memory += [{"customer": earlier}, {"assistant": previous["response"]}]
         time.sleep(delay)
     result = orch.handle(case["message"], case["user_id"], session_id=session_id, include_evidence=True)
+    if memory and "evidence" in result:
+        # The judges only see THIS turn's tool output, so a fact the agent legitimately remembered from the
+        # conversation looks invented to them (the human calibration found the same defect with hand-offs).
+        result["evidence"].insert(0, {"tool": "conversation_memory", "result": {"earlier_turns": memory}})
     route = actual_route(result)
     route_ok = route_matches(case["expected_route"], route)
     if case.get("expected_agent_contains"):
@@ -80,8 +119,9 @@ def run_case(orch, case: dict, delay: float) -> tuple[dict, dict]:
     row = {
         "id": case["id"], "category": category(case), "message": case["message"], "turns": case.get("turns", []),
         "expected_route": case["expected_route"], "route": route, "agent": result["agent"], "route_ok": route_ok,
-        "tools": result["tools_used"], "tools_ok": tools_match(case["expected_tools"], result["tools_used"]),
+        "tools": result["tools_used"], "tools_ok": tools_match(case.get("expected_tools"), result["tools_used"]),
         "content_ok": content_matches(case, result["response"]), "escalated": result["escalated"],
+        "unsupported_numbers": unsupported_numbers(result["response"], result.get("evidence", []), case["message"]),
         "latency_ms": result["trace"]["total_ms"], "tokens": result["trace"]["tokens"], "response": result["response"],
         # excerpt kept for human review (evals/human_review.py); the judges get the full evidence
         "evidence_excerpt": json.dumps(result.get("evidence", []), ensure_ascii=False, default=str)[:2500],
@@ -146,7 +186,13 @@ def main() -> None:
         "content_check_rate": round(statistics.mean(r["content_ok"] for r in all_rows), 3),
         "latency_p50_ms": round(statistics.median(r["latency_ms"] for r in all_rows)),
         "latency_p95_ms": round(sorted(r["latency_ms"] for r in all_rows)[min(len(all_rows) - 1, int(0.95 * len(all_rows)))]),
+        "latency_p99_ms": round(sorted(r["latency_ms"] for r in all_rows)[min(len(all_rows) - 1, int(0.99 * len(all_rows)))]),
         "avg_tokens": round(statistics.mean(r["tokens"]["input"] + r["tokens"]["output"] for r in all_rows)),
+        "est_cost_usd_per_request": round(statistics.mean(orch.metrics.cost_usd(r["tokens"]["input"], r["tokens"]["output"])
+                                                          for r in all_rows), 6),
+        # share of answered cases whose numbers all appear in the evidence (deterministic check)
+        "numeric_grounding_rate": round(statistics.mean(not r["unsupported_numbers"] for r in all_rows), 3),
+        "numbers_flagged": sorted({r["id"] for r in all_rows if r["unsupported_numbers"]}),
     }
     if len(runs) > 1:
         summary["unstable_cases"] = sorted(k for k, v in pass_rate.items() if 0 < v < 1)
@@ -219,13 +265,13 @@ def write_markdown(summary: dict, rows: list[dict], pass_rate: dict, meta: dict,
                     lines.append(f"- {metric}: {a['exact']} · {a['within_1']} · {a['mean_abs_diff']} · "
                                  f"κ {a['weighted_kappa']} (n={a['n']})")
     lines += ["", "## Cases", "", "| Case | Category | Route (expected) | Agent | Tools | Route | Tools | Content | "
-              "Judges G/H | Pass rate | Latency |", "|---|---|---|---|---|---|---|---|---|---|---|"]
+              "Numbers | Judges G/H | Pass rate | Latency |", "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         j = r.get("judge", {})
         jg = f"{j['groundedness']}/{j['helpfulness']}" if j else "-"
         lines.append(f"| {r['id']} | {r['category']} | {r['route']} ({r['expected_route']}) | {r['agent']} | "
                      f"{', '.join(r['tools']) or '-'} | {ok(r['route_ok'])} | {ok(r['tools_ok'])} | {ok(r['content_ok'])} | "
-                     f"{jg} | {pass_rate[r['id']]:.2f} | {r['latency_ms']:.0f} ms |")
+                     f"{'✅' if not r.get('unsupported_numbers') else '⚠️ ' + ', '.join(r['unsupported_numbers'])} | {jg} | {pass_rate[r['id']]:.2f} | {r['latency_ms']:.0f} ms |")
     lines += ["", "## Answers", ""]
     for r in rows:
         lines += [f"### {r['id']} — {r['message']}", "", r["response"], ""]

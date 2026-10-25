@@ -5,12 +5,14 @@
         ──► the agent writes the next message to the customer ──► bot confirms in the chat ("✅ sent")
 
     "/close <text>" as the reply closes the case; any other reply answers it and keeps it open.
+    Approval cases (🛂 APR-, e.g. a refund): reply "/approve [note]" or "/reject [note]" - nothing runs before.
 
 Setup (README §5): create a bot with @BotFather, add it to a group (or talk to it directly), then set
-TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env. Optional TELEGRAM_ALLOWED_USER_IDS restricts who may answer.
+TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID and TELEGRAM_ALLOWED_USER_IDS (who may answer) in .env.
 
-Security: only messages from the configured chat (and allowed users, when set) are accepted, and only as a
-reply to a hand-off notification - a random message in the chat cannot answer anyone.
+Security: only messages from the configured chat AND from allowed user ids are accepted (the allowlist is
+required: without it the bridge stays off), and only as a reply to a case notification - a random message in
+the chat cannot answer anyone. The operator (tg:<username or id>) is stored with the answer for audit.
 
 Replicas: Telegram allows one poller per bot. With one container the poller runs inside the API; with
 several replicas run it once as a worker (docker-compose.replicas.yml: `python -m app.telegram`).
@@ -52,10 +54,15 @@ class TelegramBridge:
         """Post the case; the message id is stored so the specialist's reply finds its ticket."""
         turns = memory.history(handoff["session_id"], limit=6) if handoff.get("session_id") else []
         convo = "\n".join(f"{ROLE.get(t['role'], t['role'])}: {t['text'][:300]}" for t in turns)
-        text = (f"🎫 {handoff['ticket_id']} · prioridade {handoff['priority']} · {handoff['category']}\n"
-                f"Lojista: {handoff['user_id']}\nMotivo: {handoff['reason']}\n\nResumo: {handoff['summary']}\n\n"
-                f"{convo}\n\n↩️ RESPONDA a esta mensagem para enviar a resposta ao cliente "
-                f"(comece com /close para encerrar o caso).")
+        if handoff.get("kind") == "approval":
+            text = (f"🛂 APROVAÇÃO {handoff['ticket_id']} · lojista {handoff['user_id']}\n{handoff['summary']}\n\n"
+                    f"{convo}\n\n↩️ RESPONDA a esta mensagem com /approve ou /reject (pode incluir uma nota). "
+                    f"Nada é executado antes da decisão.")
+        else:
+            text = (f"🎫 {handoff['ticket_id']} · prioridade {handoff['priority']} · {handoff['category']}\n"
+                    f"Lojista: {handoff['user_id']}\nMotivo: {handoff['reason']}\n\nResumo: {handoff['summary']}\n\n"
+                    f"{convo}\n\n↩️ RESPONDA a esta mensagem para enviar a resposta ao cliente "
+                    f"(comece com /close para encerrar o caso).")
         try:
             msg = self._call("sendMessage", chat_id=self.chat_id, text=text[:4000])
             memory.set_channel_ref(handoff["ticket_id"], f"tg:{self.chat_id}:{msg['message_id']}")
@@ -63,6 +70,16 @@ class TelegramBridge:
                                     "message_id": msg["message_id"]}))
         except Exception as exc:  # the web inbox still works if Telegram is down
             logger.warning(json.dumps({"event": "telegram_notify_failed", "error": str(exc)[:200]}))
+
+    def notify_overdue(self, handoff: dict) -> None:
+        """SLA missed: warn the team again, as a reply to the original case message when there is one."""
+        ref = (handoff.get("channel_ref") or "").rsplit(":", 1)
+        extra = {"reply_to_message_id": int(ref[1])} if len(ref) == 2 and ref[1].isdigit() else {}
+        try:
+            self._call("sendMessage", chat_id=self.chat_id, text=f"⏰ SLA estourado: {handoff['ticket_id']} "
+                       f"(lojista {handoff['user_id']}) ainda sem resposta. Prioridade elevada para ALTA.", **extra)
+        except Exception as exc:
+            logger.warning(json.dumps({"event": "telegram_overdue_failed", "error": str(exc)[:200]}))
 
     # -- inbound: specialist replies ----------------------------------------------------
     def _ignore(self, reason: str, **info) -> None:
@@ -78,7 +95,8 @@ class TelegramBridge:
         if chat != self.chat_id:
             self._ignore("other_chat", chat_id=chat, expected=self.chat_id)
             return None
-        sender = str((msg.get("from") or {}).get("id", ""))
+        who = msg.get("from") or {}
+        sender = str(who.get("id", ""))
         if self.allowed and sender not in self.allowed:
             self._ignore("user_not_allowed", user_id=sender)
             return None
@@ -94,14 +112,22 @@ class TelegramBridge:
             self._ignore("no_case_for_this_message", ref=ref)
             self._reply(msg, "Não encontrei o caso desta mensagem. Responda à mensagem 🎫 HUM-... mais recente.")
             return None
-        close = text.lower().startswith("/close")
-        reply = text[6:].strip() if close else text
-        if not reply:
-            self._reply(msg, "Escreva a resposta depois do /close.")
+        operator = f"tg:{who.get('username') or sender}"
+        command = text.split()[0].lower() if text.startswith("/") else ""
+        decision = {"/approve": "approve", "/reject": "reject"}.get(command)
+        close = command == "/close"
+        reply = text[len(command):].strip() if command else text
+        if handoff.get("kind") == "approval" and not decision:
+            self._reply(msg, "Este caso precisa de uma decisão: responda com /approve ou /reject.")
+            return None
+        if not reply and not decision:
+            self._reply(msg, "Escreva a resposta depois do comando.")
             return None
         try:
-            out = orchestrator.resume_after_human(handoff["ticket_id"], reply, close=close)
-            self._reply(msg, f"✅ {handoff['ticket_id']} {'encerrado' if close else 'respondido'}. "
+            out = orchestrator.resume_after_human(handoff["ticket_id"], reply, close=close, operator=operator,
+                                                  decision=decision)
+            done = {"approve": "aprovado", "reject": "recusado"}.get(decision) or ("encerrado" if close else "respondido")
+            self._reply(msg, f"✅ {handoff['ticket_id']} {done} por {operator}. "
                              f"Enviado ao cliente:\n\n{out['message_to_customer'][:3500]}")
             logger.info(json.dumps({"event": "telegram_reply_delivered", "ticket_id": handoff["ticket_id"]}))
         except ValueError as exc:
@@ -146,14 +172,18 @@ class TelegramBridge:
 
 
 def bridge_from_settings(settings) -> TelegramBridge | None:
-    if settings.telegram_bot_token and settings.telegram_chat_id:
-        return TelegramBridge(settings.telegram_bot_token, settings.telegram_chat_id, settings.telegram_allowed_user_ids)
-    return None
+    if not (settings.telegram_bot_token and settings.telegram_chat_id):
+        return None
+    if not settings.telegram_allowed_user_ids.strip() and not settings.telegram_allow_any_member:
+        # fail closed: without an allowlist anyone in the chat could answer customers or approve refunds
+        logger.error(json.dumps({"event": "telegram_disabled", "reason": "TELEGRAM_ALLOWED_USER_IDS is required"}))
+        return None
+    return TelegramBridge(settings.telegram_bot_token, settings.telegram_chat_id, settings.telegram_allowed_user_ids)
 
 
 if __name__ == "__main__":  # dedicated worker (one per bot) for multi-replica deployments
     from app.config import get_settings
-    from app.main import build_orchestrator
+    from app.main import build_orchestrator, sla_loop
     from app.observability import setup_logging
 
     s = get_settings()
@@ -163,6 +193,9 @@ if __name__ == "__main__":  # dedicated worker (one per bot) for multi-replica d
         raise SystemExit("Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to run the Telegram worker.")
     orch = build_orchestrator(s)
     orch.on_handoff = lambda h: bridge.notify_handoff(orch.memory, h)
+    orch.on_overdue = bridge.notify_overdue
+    if s.sla_check_interval_s > 0:  # with replicas the worker also runs the SLA check (claimed atomically)
+        threading.Thread(target=sla_loop, args=(orch, s.sla_check_interval_s), daemon=True).start()
     while True:
         bridge.run_forever(orch)
         time.sleep(5)

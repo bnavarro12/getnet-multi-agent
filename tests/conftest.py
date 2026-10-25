@@ -13,7 +13,7 @@ from app.observability import Metrics
 from app.orchestrator import Orchestrator, Services
 from app.rag.retriever import Retriever
 from app.rag.store import Chunk, VectorStore
-from tests.fakes import FakeLLM, fake_web_search, hash_embed
+from tests.fakes import FakeLLM, fake_fx, fake_weather, fake_web_search, hash_embed
 
 ROOT = Path(__file__).resolve().parent.parent
 TODAY = date(2026, 10, 20)  # a Tuesday -> "yesterday" is Monday
@@ -42,6 +42,7 @@ def settings(tmp_path) -> Settings:
         analytics_db_path=tmp_path / "analytics.db", eval_report_path=tmp_path / "eval_report.json",
         state_db_path=tmp_path / "state.db", index_snapshot_path=tmp_path / "none.json.gz",
         admin_api_key=STAFF_KEY, rate_limit_per_minute=1000, auth_enabled=True,
+        staff_keys_file=tmp_path / "staff_keys.json", sla_check_interval_s=0,
     )
 
 
@@ -71,10 +72,10 @@ def repo(settings, db) -> CustomerRepository:
     return CustomerRepository(settings.customers_file, db, today=TODAY)
 
 
-def make_orchestrator(settings, repo, store, llm=None, web_search=fake_web_search, memory=False) -> Orchestrator:
+def make_orchestrator(settings, repo, store, llm=None, web_search=fake_web_search, memory=False, fx=fake_fx) -> Orchestrator:
     llm = llm or FakeLLM()
     services = Services(llm=llm, repo=repo, retriever=Retriever(store, llm, settings),
-                        web_search=web_search, today=lambda: TODAY)
+                        web_search=web_search, today=lambda: TODAY, weather=fake_weather, fx=fx)
     mem = ConversationStore(repo.db) if memory else None
     return Orchestrator(services, settings, Metrics(), memory=mem)
 
@@ -93,7 +94,7 @@ def client(settings, repo, store):
     app.state.rate_limiter = RateLimiter(settings.rate_limit_per_minute)
     with TestClient(app, headers=AUTH_1988) as c:
         yield c
-    for name in ("orchestrator", "analytics", "api_keys", "rate_limiter"):
+    for name in ("orchestrator", "analytics", "api_keys", "rate_limiter", "staff_keys"):
         setattr(app.state, name, None)
 
 

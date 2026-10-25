@@ -1,4 +1,4 @@
-{"id": "r01", "query": "diferença entre Get Clássica e Get Smart", "relevant_url_contains": ["maquininha", "smart", "classica"]}
+{"id": "r01", "query": "diferença entre Get Clássica e Get Smart", "relevant_url_contains": ["todas-as-maquininhas"], "relevant_text_all": ["Smart", "Clássica"]}
 {"id": "r02", "query": "receber vendas via Pix na maquininha", "relevant_url_contains": ["pix"]}
 {"id": "r03", "query": "como funciona a antecipação de recebíveis", "relevant_url_contains": ["antecipa", "duvidas"]}
 {"id": "r04", "query": "parcelar vendas no crediário", "relevant_url_contains": ["crediario"]}
@@ -12,3 +12,19 @@
 {"id": "r12", "query": "converter moedas estrangeiras", "relevant_url_contains": ["conversor"]}
 {"id": "r13", "query": "minha maquininha não conecta, o que fazer", "relevant_url_contains": ["get-ajuda", "duvidas"]}
 {"id": "r14", "query": "Getnet international payment solutions for merchants", "relevant_url_contains": ["getnet.net"]}
+{"id": "r15", "query": "como funciona o split de pagamento", "relevant_url_contains": ["/split"]}
+{"id": "r16", "query": "fazer recarga de celular na maquininha", "relevant_url_contains": ["recargas"]}
+{"id": "r17", "query": "sistema TEF para o meu varejo", "relevant_url_contains": ["tef"]}
+{"id": "r18", "query": "conciliar as vendas do meu negócio", "relevant_url_contains": ["conciliador", "eye"]}
+{"id": "r19", "query": "vender com o Cartão BNDES", "relevant_url_contains": ["portal-bndes"]}
+{"id": "r20", "query": "quais bandeiras de cartão a Getnet aceita", "relevant_url_contains": ["bandeiras"]}
+{"id": "r21", "query": "como falar com a ouvidoria da Getnet", "relevant_url_contains": ["ouvidoria"]}
+{"id": "r22", "query": "reportar uma vulnerabilidade de segurança", "relevant_url_contains": ["report-vulnerability", "politica-de-seguranca"]}
+{"id": "r23", "query": "como vender com segurança e evitar fraudes", "relevant_url_contains": ["proteja-seu-negocio", "koin"]}
+{"id": "r24", "query": "API para desenvolvedores integrarem pagamentos", "relevant_url_contains": ["developers", "get-code"]}
+{"id": "r25", "query": "payment solutions for restaurants", "relevant_url_contains": ["restaurant"]}
+{"id": "r26", "query": "online payments for large enterprises", "relevant_url_contains": ["online-payments", "large-enterprises"]}
+{"id": "r27", "query": "documentos e contratos para download", "relevant_url_contains": ["downloads"]}
+{"id": "r28", "query": "compras feitas por agentes de IA", "relevant_url_contains": ["agentic-commerce"]}
+{"id": "r29", "query": "maquininha com recebimento em 2 dias úteis", "relevant_url_contains": ["ofertas"]}
+{"id": "r30", "query": "quanto custa a Get Smart", "relevant_url_contains": ["todas-as-maquininhas"], "relevant_text_all": ["Smart", "R$"]}

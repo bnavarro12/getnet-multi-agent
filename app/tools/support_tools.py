@@ -35,10 +35,27 @@ def _open_ticket(ctx: ToolContext, category: str, summary: str, priority: str = 
     if not ctx.services.repo.exists(ctx.user_id):
         return NOT_FOUND
     ticket = ctx.services.repo.create_ticket(ctx.user_id, category, summary, priority)
-    ctx.tickets.append(ticket["ticket_id"])
+    ctx.add_ticket(ticket["ticket_id"])
     if ticket.get("deduplicated"):
         return {"ticket": ticket, "note": "An open ticket for this issue already exists; it was reused, not duplicated."}
     return {"ticket": ticket}
+
+
+def _request_refund(ctx: ToolContext, transaction_id: str, reason: str = "") -> dict:
+    tx = ctx.services.repo.find_transaction(ctx.user_id, transaction_id)
+    if tx is None:
+        return {"error": "transaction_not_found"}
+    if tx["status"] != "approved":
+        return {"error": "only_approved_sales_can_be_refunded"}
+    done = ctx.services.repo.refund_record(ctx.user_id, transaction_id)
+    if done:  # answer from the system of record instead of opening a case a human would only reject
+        return {"status": "already_refunded", "refund_id": done["ticket_id"], "amount": tx["amount"],
+                "refunded_at": done["created_at"],
+                "note": "This sale was already refunded. Tell the customer, with the refund id and date."}
+    ctx.approval_request = {"action": "refund", "transaction_id": transaction_id, "amount": tx["amount"],
+                            "reason": (reason or "")[:300]}
+    return {"status": "pending_human_approval",
+            "note": "Refunds move money: a Getnet specialist must approve first. Tell the customer it is waiting for approval."}
 
 
 GET_CUSTOMER_PROFILE = Tool(
@@ -92,5 +109,19 @@ OPEN_SUPPORT_TICKET = Tool(
         "required": ["category", "summary"],
     },
     fn=_open_ticket,
+    side_effect=True,
+)
+
+REQUEST_REFUND = Tool(
+    name="request_refund",
+    description="Ask to refund/cancel one of the merchant's approved sales. RISKY ACTION: it does not refund by itself, "
+                "it creates a request that a human specialist must approve first.",
+    parameters={
+        "type": "object",
+        "properties": {"transaction_id": {"type": "string", "description": "e.g. TX-89952"},
+                       "reason": {"type": "string", "description": "Why the merchant wants the refund"}},
+        "required": ["transaction_id"],
+    },
+    fn=_request_refund,
     side_effect=True,
 )

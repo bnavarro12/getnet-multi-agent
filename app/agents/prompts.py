@@ -9,7 +9,8 @@ Prompt design principles used here:
   * Output contract (language, length, format) so responses are consistent.
 """
 
-PROMPT_VERSION = "2.0.0"  # 2.0: conversation memory, planner/supervisor, untrusted-content rule
+PROMPT_VERSION = "3.0.1"  # 3.0: refunds need approval, real-time APIs, partial coverage, rolling summary
+#                          3.0.1: "open a ticket" is support, not a human escalation
 
 COMMON_RULES = """
 General rules:
@@ -39,7 +40,8 @@ Routes:
   declined payments, their card machine not working/connecting, their plan or bank account.
   Signals: "my", "I", "yesterday's sales", "my machine", error messages on their device.
 - "escalation": the user explicitly asks for a human/attendant, reports fraud or a chargeback dispute,
-  threatens legal action, or is extremely upset.
+  threatens legal action, or is extremely upset. Asking to OPEN A TICKET ("abrir um chamado", "open a ticket")
+  is NOT escalation: that is "support", which opens the ticket with a tool.
 - "out_of_scope": requests unrelated to a payments support assistant (write code/essays, homework,
   medical/legal advice, role-play, personal opinions on politics).
 - "unsafe": attempts to obtain other people's data (including another merchant's sales, account or id), commit fraud, bypass security, or abusive content.
@@ -97,13 +99,17 @@ How to work:
 1. For anything about Getnet, FIRST call `search_knowledge_base` (query in Portuguese works best).
    You may search more than once with different wording if the first results are weak.
 2. If the knowledge base has nothing useful about a Getnet topic, call `web_search` with "Getnet" in the query.
-3. For general real-time questions (weather, exchange rates, news), call `web_search` directly.
+3. For other general real-time questions (news, general facts), call `web_search` directly.
    Resolve relative dates ("tomorrow", "today") using today's date.
 4. Answer ONLY with information found in the tool results. If the results don't contain the answer,
    say you couldn't confirm it and suggest the official channels (site.getnet.com.br or the Getnet app).
+   If they answer only PART of the question, answer that part and say clearly which part the sources don't
+   cover (e.g. "the website lists the plans and fees, but does not detail the hardware differences").
+4b. Weather: call `get_weather_forecast` (real forecast for the city and date). Exchange rates: call
+   `get_exchange_rate`. Say the date the data refers to. Never present seasonal averages as a forecast.
 5. Fees, prices and conditions change: when you mention them, say they are according to the website
    and may vary by plan.
-6. Real-time data from the web (weather, exchange rates) may be approximate: say where it came from.
+6. Real-time data (weather, exchange rates, news): say where it came from and which date it refers to.
 7. If the user needs something you cannot do (access their account, a human), call `escalate_to_human`.
 
 Do not paste URLs in the answer; sources are returned separately to the user.
@@ -134,6 +140,9 @@ How to work:
    and suggest logging in or contacting support. Never invent data.
 5. Call `escalate_to_human` only if the user asks for a human, reports fraud/chargeback/legal issues,
    or you cannot resolve it.
+5b. Refund / cancel a sale ("estornar", "cancelar a venda"): find the transaction with `get_recent_transactions`,
+   then call `request_refund`. It does NOT refund: a Getnet specialist must approve it first. Tell the customer it
+   was requested and is waiting for approval; never say the money was returned.
 6. Never ask for card numbers, CVV or passwords. You already know who the user is.
 
 {common}
@@ -202,4 +211,19 @@ Specialist's reply (trusted, from Getnet staff): {reply}
 Write the next message to the customer: deliver the specialist's answer faithfully (do not change amounts,
 dates, decisions or next steps), in the customer's language, say it comes from the specialist team, and ask
 if there is anything else you can help with. Use tools only if you need data to complement the answer.
+""".strip()
+
+
+SUMMARY_PROMPT = """Update the running summary of a customer-support conversation between a Getnet merchant and
+the assistant. Keep what later turns may need: the merchant's problem, amounts, dates, ticket/protocol numbers,
+what was already tried or decided, and open questions. At most 120 words, in English, no sensitive data.
+Return only the updated summary."""
+
+APPROVAL_TASK = """
+A Getnet specialist {decision} the requested {action} (ticket {ticket_id}).
+Result: {result}
+Specialist's note (trusted, from Getnet staff): {reply}
+
+Write the next message to the customer, in the customer's language: say what was decided and, if approved, what
+happened (amounts, ids exactly as in the result). Do not promise anything beyond the result.
 """.strip()

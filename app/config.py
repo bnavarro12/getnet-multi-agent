@@ -77,7 +77,14 @@ class Settings(BaseSettings):
     # Staff key (operations + human specialists): /analytics, /metrics, /evals, /handoffs.
     # Empty = those endpoints are disabled.
     admin_api_key: str = ""
+    # OIDC / JWT login (optional): set the JWKS URL of the identity provider (or a shared secret for HS256)
+    auth_jwt_jwks_url: str = ""
+    auth_jwt_secret: str = ""
+    auth_jwt_issuer: str = ""
+    auth_jwt_audience: str = ""
+    staff_keys_file: Path = BASE_DIR / "data" / "staff_keys.json"  # personal staff keys: sha256 -> operator
     rate_limit_per_minute: int = 20       # per merchant (or per IP when unauthenticated)
+    rate_limit_fail_open: bool = False    # if the shared counter fails: false = refuse (503), true = let through
     trust_proxy_headers: bool = False     # behind a load balancer: take the client IP from X-Forwarded-For
 
     # --- State (conversations, hand-offs, tickets, analytics, rate limits) -----
@@ -99,7 +106,13 @@ class Settings(BaseSettings):
     # --- Human-in-the-loop over Telegram (optional) ---------------------------
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
-    telegram_allowed_user_ids: str = ""    # comma-separated Telegram user ids allowed to answer (empty = anyone in the chat)
+    telegram_allowed_user_ids: str = ""    # comma-separated Telegram user ids allowed to answer (REQUIRED)
+    telegram_allow_any_member: bool = False  # explicit opt-out of the allowlist (not recommended)
+    # Human response-time targets (SLA). An open case past its target is re-escalated once: priority -> high
+    # and the team is warned again (Telegram + log). Checked every sla_check_interval_s (0 = off).
+    sla_high_minutes: float = 120
+    sla_normal_minutes: float = 480
+    sla_check_interval_s: float = 60
     telegram_polling: bool = True          # false on API replicas when a dedicated worker polls
 
     # --- Observability ------------------------------------------------------

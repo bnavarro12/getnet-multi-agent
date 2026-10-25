@@ -1,15 +1,27 @@
 {
   "summary": {
     "dense": {
-      "recall@5": 0.929,
-      "mrr@5": 0.875,
-      "precision@5": 0.643,
+      "recall@5": 0.967,
+      "mrr@5": 0.925,
+      "precision@5": 0.687,
       "empty_rate": 0
     },
     "hybrid": {
-      "recall@5": 0.929,
-      "mrr@5": 0.821,
-      "precision@5": 0.571,
+      "recall@5": 0.967,
+      "mrr@5": 0.9,
+      "precision@5": 0.64,
+      "empty_rate": 0
+    },
+    "dense+rerank": {
+      "recall@5": 0.933,
+      "mrr@5": 0.908,
+      "precision@5": 0.64,
+      "empty_rate": 0
+    },
+    "hybrid+rerank": {
+      "recall@5": 0.967,
+      "mrr@5": 0.859,
+      "precision@5": 0.613,
       "empty_rate": 0
     }
   },
@@ -18,9 +30,9 @@
       "id": "r01",
       "query": "diferença entre Get Clássica e Get Smart",
       "dense": {
-        "hit": false,
-        "rr": 0.0,
-        "precision": 0.0,
+        "hit": true,
+        "rr": 0.5,
+        "precision": 0.6,
         "empty": false,
         "top_urls": [
           "https://site.getnet.com.br/getstore",
@@ -29,13 +41,35 @@
         ]
       },
       "hybrid": {
-        "hit": false,
-        "rr": 0.0,
-        "precision": 0.0,
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
         "empty": false,
         "top_urls": [
           "https://site.getnet.com.br",
           "https://site.getnet.com.br/get-tap",
+          "https://site.getnet.com.br/getstore"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/get-tap",
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/todas-as-maquininhas"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/get-tap",
+          "https://site.getnet.com.br",
           "https://site.getnet.com.br/getstore"
         ]
       }
@@ -64,6 +98,28 @@
           "https://site.getnet.com.br",
           "https://site.getnet.com.br/todas-as-maquininhas"
         ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/pix",
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/todas-as-maquininhas"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/pix",
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br"
+        ]
       }
     },
     {
@@ -90,6 +146,28 @@
           "https://site.getnet.com.br/duvidas",
           "https://site.getnet.com.br/duvidas"
         ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas"
+        ]
       }
     },
     {
@@ -107,6 +185,28 @@
         ]
       },
       "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/crediario",
+          "https://site.getnet.com.br/crediario",
+          "https://site.getnet.com.br/crediario"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/crediario",
+          "https://site.getnet.com.br/crediario",
+          "https://site.getnet.com.br/crediario"
+        ]
+      },
+      "hybrid+rerank": {
         "hit": true,
         "rr": 1.0,
         "precision": 1.0,
@@ -142,6 +242,28 @@
           "https://site.getnet.com.br/link-de-pagamento",
           "https://site.getnet.com.br/link-de-pagamento"
         ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/link-de-pagamento",
+          "https://site.getnet.com.br/link-de-pagamento",
+          "https://www.getnet.net/en/our-solutions/online-payments"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/link-de-pagamento",
+          "https://www.getnet.net/en/our-solutions/online-payments",
+          "https://site.getnet.com.br/link-de-pagamento"
+        ]
       }
     },
     {
@@ -167,6 +289,28 @@
           "https://site.getnet.com.br/duvidas",
           "https://site.getnet.com.br/conta-digital",
           "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 0.25,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 0.2,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/emprestimo"
         ]
       }
     },
@@ -194,6 +338,28 @@
           "https://site.getnet.com.br/duvidas/get-tap",
           "https://site.getnet.com.br/get-tap"
         ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas/get-tap",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/get-tap"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas/get-tap",
+          "https://site.getnet.com.br/duvidas/get-tap",
+          "https://site.getnet.com.br/get-tap"
+        ]
       }
     },
     {
@@ -211,6 +377,28 @@
         ]
       },
       "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/emprestimo",
+          "https://site.getnet.com.br/emprestimo",
+          "https://site.getnet.com.br/emprestimo"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/emprestimo",
+          "https://site.getnet.com.br/emprestimo",
+          "https://site.getnet.com.br/emprestimo"
+        ]
+      },
+      "hybrid+rerank": {
         "hit": true,
         "rr": 1.0,
         "precision": 1.0,
@@ -246,6 +434,28 @@
           "https://site.getnet.com.br/getcheckout",
           "https://site.getnet.com.br/getcheckout"
         ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/pagamentos-recorrentes",
+          "https://site.getnet.com.br/pagamentos-recorrentes",
+          "https://site.getnet.com.br/getcheckout"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/pagamentos-recorrentes",
+          "https://site.getnet.com.br/pagamentos-recorrentes",
+          "https://site.getnet.com.br/getcheckout"
+        ]
       }
     },
     {
@@ -271,6 +481,28 @@
           "https://site.getnet.com.br/taxas",
           "https://site.getnet.com.br/ofertas",
           "https://site.getnet.com.br/get-tap"
+        ]
+      },
+      "dense+rerank": {
+        "hit": false,
+        "rr": 0.0,
+        "precision": 0.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br/produtos-digitais"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 0.3333333333333333,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br/get-tap",
+          "https://site.getnet.com.br/taxas"
         ]
       }
     },
@@ -298,6 +530,28 @@
           "https://site.getnet.com.br/getcheckout",
           "https://site.getnet.com.br/getcheckout"
         ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/getcheckout",
+          "https://site.getnet.com.br/getcheckout",
+          "https://www.getnet.net/en/our-solutions/online-payments"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/getcheckout",
+          "https://www.getnet.net/en/our-solutions/online-payments",
+          "https://www.getnet.net/en/our-solutions/online-payments"
+        ]
       }
     },
     {
@@ -324,6 +578,28 @@
           "https://site.getnet.com.br/conversor-de-moedas",
           "https://site.getnet.com.br/conversor-de-moedas"
         ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/conversor-de-moedas",
+          "https://site.getnet.com.br/conversor-de-moedas",
+          "https://site.getnet.com.br/imprensa"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/conversor-de-moedas",
+          "https://site.getnet.com.br/conversor-de-moedas",
+          "https://site.getnet.com.br/imprensa"
+        ]
       }
     },
     {
@@ -348,6 +624,28 @@
         "top_urls": [
           "https://site.getnet.com.br/todas-as-maquininhas",
           "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/recargas"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/conta-digital",
+          "https://site.getnet.com.br/get-ajuda"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/todas-as-maquininhas",
           "https://site.getnet.com.br/recargas"
         ]
       }
@@ -376,11 +674,802 @@
           "https://www.getnet.net/en/partners",
           "https://www.getnet.net/en"
         ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en",
+          "https://www.getnet.net/en/our-solutions/online-payments",
+          "https://www.getnet.net/en/our-solutions/value-added-solutions"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/our-solutions/online-payments",
+          "https://www.getnet.net/en",
+          "https://www.getnet.net/en/our-solutions/online-payments"
+        ]
+      }
+    },
+    {
+      "id": "r15",
+      "query": "como funciona o split de pagamento",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/split",
+          "https://site.getnet.com.br/split",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/split",
+          "https://site.getnet.com.br/split",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/split",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/split"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 0.5,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/split",
+          "https://site.getnet.com.br/split"
+        ]
+      }
+    },
+    {
+      "id": "r16",
+      "query": "fazer recarga de celular na maquininha",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/recargas",
+          "https://site.getnet.com.br/recargas",
+          "https://site.getnet.com.br/recargas"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/recargas",
+          "https://site.getnet.com.br/recargas",
+          "https://site.getnet.com.br/recargas"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/recargas",
+          "https://site.getnet.com.br/recargas",
+          "https://site.getnet.com.br/recargas"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/recargas",
+          "https://site.getnet.com.br/recargas",
+          "https://site.getnet.com.br/recargas"
+        ]
+      }
+    },
+    {
+      "id": "r17",
+      "query": "sistema TEF para o meu varejo",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/tef/solucao-tef",
+          "https://site.getnet.com.br/tef/solucao-tef",
+          "https://site.getnet.com.br/tef/solucao-tef"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/tef/solucao-tef",
+          "https://site.getnet.com.br/tef/solucao-tef",
+          "https://site.getnet.com.br/tef/pos-tef"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/tef/solucao-tef",
+          "https://site.getnet.com.br/tef/solucao-tef",
+          "https://site.getnet.com.br/ofertas-tef-getnet"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/tef/solucao-tef",
+          "https://site.getnet.com.br/tef/solucao-tef",
+          "https://site.getnet.com.br/ofertas-tef-getnet"
+        ]
+      }
+    },
+    {
+      "id": "r18",
+      "query": "conciliar as vendas do meu negócio",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/tef/conciliador",
+          "https://site.getnet.com.br/tef/conciliador",
+          "https://site.getnet.com.br/tef/solucao-tef"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/tef/conciliador",
+          "https://site.getnet.com.br/tef/conciliador",
+          "https://site.getnet.com.br/ofertas-tef-getnet"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/tef/conciliador",
+          "https://site.getnet.com.br/tef/conciliador",
+          "https://site.getnet.com.br/tef/solucao-tef"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/tef/conciliador",
+          "https://site.getnet.com.br/tef/conciliador",
+          "https://site.getnet.com.br/ofertas-tef-getnet"
+        ]
+      }
+    },
+    {
+      "id": "r19",
+      "query": "vender com o Cartão BNDES",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/portal-bndes",
+          "https://site.getnet.com.br/portal-bndes",
+          "https://site.getnet.com.br/portal-bndes"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/portal-bndes",
+          "https://site.getnet.com.br/portal-bndes",
+          "https://site.getnet.com.br/portal-bndes"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/portal-bndes",
+          "https://site.getnet.com.br/portal-bndes",
+          "https://site.getnet.com.br/portal-bndes"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/portal-bndes",
+          "https://site.getnet.com.br/portal-bndes",
+          "https://site.getnet.com.br/portal-bndes"
+        ]
+      }
+    },
+    {
+      "id": "r20",
+      "query": "quais bandeiras de cartão a Getnet aceita",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/bandeiras",
+          "https://site.getnet.com.br/bandeiras",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "hybrid": {
+        "hit": false,
+        "rr": 0.0,
+        "precision": 0.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas/get-tap",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/bandeiras",
+          "https://site.getnet.com.br/bandeiras",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 0.25,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/tef/solucao-tef"
+        ]
+      }
+    },
+    {
+      "id": "r21",
+      "query": "como falar com a ouvidoria da Getnet",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/ouvidoria",
+          "https://site.getnet.com.br/ouvidoria",
+          "https://site.getnet.com.br/ouvidoria"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/ouvidoria",
+          "https://site.getnet.com.br/ouvidoria",
+          "https://site.getnet.com.br/ouvidoria"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/ouvidoria",
+          "https://site.getnet.com.br/ouvidoria",
+          "https://site.getnet.com.br/ouvidoria"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/ouvidoria",
+          "https://site.getnet.com.br/emprestimo",
+          "https://site.getnet.com.br/ouvidoria"
+        ]
+      }
+    },
+    {
+      "id": "r22",
+      "query": "reportar uma vulnerabilidade de segurança",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/report-vulnerability",
+          "https://site.getnet.com.br/report-vulnerability",
+          "https://site.getnet.com.br/report-vulnerability"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/report-vulnerability",
+          "https://site.getnet.com.br/politica-de-seguranca-da-informacao",
+          "https://site.getnet.com.br/politica-de-seguranca-da-informacao"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/report-vulnerability",
+          "https://site.getnet.com.br/politica-de-seguranca-da-informacao",
+          "https://site.getnet.com.br/report-vulnerability"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/report-vulnerability",
+          "https://site.getnet.com.br/report-vulnerability",
+          "https://site.getnet.com.br/politica-de-seguranca-da-informacao"
+        ]
+      }
+    },
+    {
+      "id": "r23",
+      "query": "como vender com segurança e evitar fraudes",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca",
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca",
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca",
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca",
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca",
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca",
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca",
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca",
+          "https://site.getnet.com.br/proteja-seu-negocio-e-venda-com-seguranca"
+        ]
+      }
+    },
+    {
+      "id": "r24",
+      "query": "API para desenvolvedores integrarem pagamentos",
+      "dense": {
+        "hit": false,
+        "rr": 0.0,
+        "precision": 0.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/our-solutions/omnichannel",
+          "https://site.getnet.com.br/getcheckout",
+          "https://site.getnet.com.br/getcheckout"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 0.5,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/getcheckout",
+          "https://site.getnet.com.br/get-code",
+          "https://www.getnet.net/en/our-solutions/omnichannel"
+        ]
+      },
+      "dense+rerank": {
+        "hit": false,
+        "rr": 0.0,
+        "precision": 0.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/our-solutions/omnichannel",
+          "https://site.getnet.com.br/getcheckout",
+          "https://www.getnet.net/en/our-solutions/online-payments"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": false,
+        "rr": 0.0,
+        "precision": 0.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/getcheckout",
+          "https://www.getnet.net/en/our-solutions/online-payments",
+          "https://www.getnet.net/en/our-solutions/omnichannel"
+        ]
+      }
+    },
+    {
+      "id": "r25",
+      "query": "payment solutions for restaurants",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/your-business/industries/restaurants",
+          "https://www.getnet.net/en/your-business/industries/restaurants",
+          "https://www.getnet.net/en/your-business/industries/restaurants"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/your-business/industries/restaurants",
+          "https://www.getnet.net/en/your-business/industries/restaurants",
+          "https://www.getnet.net/en/partners/soft-restaurant"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/your-business/industries/restaurants",
+          "https://www.getnet.net/en/your-business/industries/restaurants",
+          "https://www.getnet.net/en/your-business/industries/restaurants"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/your-business/industries/restaurants",
+          "https://www.getnet.net/en/your-business/industries/restaurants",
+          "https://www.getnet.net/en/your-business/industries/restaurants"
+        ]
+      }
+    },
+    {
+      "id": "r26",
+      "query": "online payments for large enterprises",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/your-business/large-enterprises",
+          "https://www.getnet.net/en/your-business/large-enterprises",
+          "https://www.getnet.net/en/your-business/large-enterprises"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/your-business/large-enterprises",
+          "https://www.getnet.net/en/your-business/large-enterprises",
+          "https://www.getnet.net/en/your-business/large-enterprises"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/your-business/large-enterprises",
+          "https://www.getnet.net/en/your-business/large-enterprises",
+          "https://www.getnet.net/en/your-business/large-enterprises"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.8,
+        "empty": false,
+        "top_urls": [
+          "https://www.getnet.net/en/your-business/large-enterprises",
+          "https://www.getnet.net/en/your-business/large-enterprises",
+          "https://www.getnet.net/en/your-business/large-enterprises"
+        ]
+      }
+    },
+    {
+      "id": "r27",
+      "query": "documentos e contratos para download",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/downloads",
+          "https://site.getnet.com.br/downloads",
+          "https://site.getnet.com.br/produtos-digitais"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/downloads",
+          "https://site.getnet.com.br/downloads",
+          "https://site.getnet.com.br/produtos-digitais"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/downloads",
+          "https://site.getnet.com.br/downloads",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.4,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/downloads",
+          "https://site.getnet.com.br/downloads",
+          "https://site.getnet.com.br/duvidas"
+        ]
+      }
+    },
+    {
+      "id": "r28",
+      "query": "compras feitas por agentes de IA",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/agentic-commerce",
+          "https://site.getnet.com.br/agentic-commerce",
+          "https://site.getnet.com.br/agentic-commerce"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/agentic-commerce",
+          "https://site.getnet.com.br/agentic-commerce",
+          "https://site.getnet.com.br/agentic-commerce"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/agentic-commerce",
+          "https://site.getnet.com.br/agentic-commerce",
+          "https://site.getnet.com.br/agentic-commerce"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 1.0,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/agentic-commerce",
+          "https://site.getnet.com.br/agentic-commerce",
+          "https://site.getnet.com.br/agentic-commerce"
+        ]
+      }
+    },
+    {
+      "id": "r29",
+      "query": "maquininha com recebimento em 2 dias úteis",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/ofertas",
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/ofertas",
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/todas-as-maquininhas"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/ofertas",
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/todas-as-maquininhas"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 0.5,
+        "precision": 0.2,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br/ofertas",
+          "https://site.getnet.com.br"
+        ]
+      }
+    },
+    {
+      "id": "r30",
+      "query": "quanto custa a Get Smart",
+      "dense": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/get-tap"
+        ]
+      },
+      "hybrid": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br",
+          "https://site.getnet.com.br/duvidas",
+          "https://site.getnet.com.br/get-tap"
+        ]
+      },
+      "dense+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br/get-tap",
+          "https://site.getnet.com.br"
+        ]
+      },
+      "hybrid+rerank": {
+        "hit": true,
+        "rr": 1.0,
+        "precision": 0.6,
+        "empty": false,
+        "top_urls": [
+          "https://site.getnet.com.br/get-tap",
+          "https://site.getnet.com.br/todas-as-maquininhas",
+          "https://site.getnet.com.br"
+        ]
       }
     }
   ],
   "chunks": 334,
   "k": 5,
-  "generated_at": "2026-10-21 19:38",
-  "embedding_model": "gemini-embedding-001"
+  "generated_at": "2026-10-25 16:21",
+  "embedding_model": "gemini-embedding-001",
+  "best_mode": "dense"
 }

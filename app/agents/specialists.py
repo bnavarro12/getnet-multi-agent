@@ -12,9 +12,9 @@ from app.agents.prompts import (COMMON_RULES, ESCALATION_PROMPT, ESCALATION_SCHE
 from app.llm import LLMClient
 from app.tools.base import ToolContext
 from app.tools.escalation_tools import ESCALATE_TO_HUMAN
-from app.tools.knowledge_tools import SEARCH_KNOWLEDGE_BASE, WEB_SEARCH
+from app.tools.knowledge_tools import GET_EXCHANGE_RATE, GET_WEATHER_FORECAST, SEARCH_KNOWLEDGE_BASE, WEB_SEARCH
 from app.tools.support_tools import (GET_CUSTOMER_PROFILE, GET_RECENT_TRANSACTIONS, GET_SALES_AND_SETTLEMENTS,
-                                     GET_TERMINAL_STATUS, OPEN_SUPPORT_TICKET)
+                                     GET_TERMINAL_STATUS, OPEN_SUPPORT_TICKET, REQUEST_REFUND)
 
 
 def _common(today: date) -> str:
@@ -27,7 +27,8 @@ class KnowledgeAgent(ToolAgent):
 
     def __init__(self, llm: LLMClient, max_iterations: int, today: date, model: str | None = None):
         super().__init__(llm, KNOWLEDGE_PROMPT.format(common=_common(today)),
-                         [SEARCH_KNOWLEDGE_BASE, WEB_SEARCH, ESCALATE_TO_HUMAN], max_iterations, model)
+                         [SEARCH_KNOWLEDGE_BASE, GET_WEATHER_FORECAST, GET_EXCHANGE_RATE, WEB_SEARCH, ESCALATE_TO_HUMAN],
+                         max_iterations, model)
 
 
 class SupportAgent(ToolAgent):
@@ -36,7 +37,7 @@ class SupportAgent(ToolAgent):
 
     def __init__(self, llm: LLMClient, max_iterations: int, today: date, model: str | None = None):
         tools = [GET_CUSTOMER_PROFILE, GET_SALES_AND_SETTLEMENTS, GET_RECENT_TRANSACTIONS, GET_TERMINAL_STATUS,
-                 OPEN_SUPPORT_TICKET, SEARCH_KNOWLEDGE_BASE, ESCALATE_TO_HUMAN]
+                 OPEN_SUPPORT_TICKET, REQUEST_REFUND, SEARCH_KNOWLEDGE_BASE, ESCALATE_TO_HUMAN]
         super().__init__(llm, SUPPORT_PROMPT.format(common=_common(today)), tools, max_iterations, model)
 
 
@@ -79,7 +80,7 @@ class EscalationAgent:
             ctx.user_id, data.get("category", "other"), data.get("summary", reason),
             priority=data.get("priority", "normal"), kind="human_handoff",
         )
-        ctx.tickets.append(ticket["ticket_id"])
+        ctx.add_ticket(ticket["ticket_id"])
         template = data.get("user_message") or self.FALLBACK_MESSAGES.get(lang, self.FALLBACK_MESSAGES["en"])
         if "{ticket_id}" not in template:
             template += " (protocol: {ticket_id})"

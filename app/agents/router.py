@@ -46,7 +46,7 @@ class RouterAgent:
 
     def route(self, ctx: ToolContext, message: str, history: list[dict] | None = None) -> RouteDecision:
         with ctx.trace.span("llm:router", history_turns=len(history or [])) as span:
-            resp = self.llm.chat(system=ROUTER_PROMPT, history=[self.llm.user_message(format_input(message, history))],
+            resp = self.llm.chat(system=ROUTER_PROMPT, history=[self.llm.user_message(format_input(message, history, summary=ctx.summary))],
                                  json_schema=ROUTER_SCHEMA, model=self.model)
             ctx.trace.add_usage(resp.input_tokens, resp.output_tokens)
             decision = self._parse(resp.text)

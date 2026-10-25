@@ -122,36 +122,41 @@ function renderList() {
 function renderDetail(c) {
   const turns = c.conversation.map(t => `<div class="turn ${esc(t.role)}"><div class="who">${WHO[t.role] || esc(t.role)}</div>${esc(t.text)}</div>`).join("");
   const canReply = c.status === "open";
+  const approval = c.kind === "approval";
   $("detail").innerHTML = `
     <h2>${esc(c.ticket_id)} · ${esc(c.user_id)}</h2>
-    <div class="meta">Priority <b>${esc(c.priority)}</b> · ${esc(c.category)} · status ${esc(c.status)} · reason: ${esc(c.reason)}<br>
+    <div class="meta">${approval ? "<b>APPROVAL REQUIRED</b> · " : ""}Priority <b>${esc(c.priority)}</b>${c.escalation_level ? " (SLA missed)" : ""} · ${esc(c.category)} · status ${esc(c.status)} · reason: ${esc(c.reason)}<br>
       Summary: ${esc(c.summary)}</div>
     ${turns || `<p class="empty">No conversation stored.</p>`}
     ${canReply ? `
       <label for="reply" class="meta">Your reply (the assistant delivers it to the customer and continues the conversation)</label>
       <textarea id="reply" placeholder="e.g. We blocked the charge and the refund of R$ 89,90 will be credited in 2 business days."></textarea>
-      <div class="actions">
+      <div class="actions">${approval ? `
+        <button class="primary" id="approve">Approve</button> <button id="reject">Reject</button>` : `
         <label class="meta" style="margin:0"><input type="checkbox" id="close"> Close the case (solved)</label>
-        <button class="primary" id="sendreply">Send reply</button>
+        <button class="primary" id="sendreply">Send reply</button>`}
       </div>
-      <div id="result"></div>` : `<p class="meta">Answered: ${esc(c.human_reply || "")}</p>`}`;
-  if (canReply) $("sendreply").onclick = () => sendReply(c.ticket_id);
+      <div id="result"></div>` : `<p class="meta">Answered by ${esc(c.answered_by || "?")}: ${esc(c.human_reply || "")}</p>`}`;
+  if (canReply && approval) {
+    $("approve").onclick = () => sendReply(c.ticket_id, "approve");
+    $("reject").onclick = () => sendReply(c.ticket_id, "reject");
+  } else if (canReply) $("sendreply").onclick = () => sendReply(c.ticket_id);
 }
 
-async function sendReply(id) {
+async function sendReply(id, decision) {
   const text = $("reply").value.trim();
-  if (!text) return;
-  $("sendreply").disabled = true;
+  if (!text && !decision) return;
+  document.querySelectorAll("#detail button").forEach(b => b.disabled = true);
   try {
     const r = await fetch(`/handoffs/${encodeURIComponent(id)}/reply`, { method: "POST", headers: headers(),
-      body: JSON.stringify({ reply: text, close: $("close").checked }) });
+      body: JSON.stringify(decision ? { reply: text, decision } : { reply: text, close: $("close").checked }) });
     const body = await r.json();
     if (!r.ok) throw new Error(body.detail || r.status);
     $("result").innerHTML = `<div class="result"><b>Sent to the customer (${esc(body.agent)} agent):</b>\n${esc(body.message_to_customer)}</div>`;
     setTimeout(load, 1500);
   } catch (e) {
     $("result").innerHTML = `<div class="result">Could not send: ${esc(e.message)}</div>`;
-    $("sendreply").disabled = false;
+    document.querySelectorAll("#detail button").forEach(b => b.disabled = false);
   }
 }
 

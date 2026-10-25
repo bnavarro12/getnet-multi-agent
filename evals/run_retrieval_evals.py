@@ -9,8 +9,11 @@ contains one of the labelled substrings):
   * Precision@K         - share of the returned chunks that are relevant
   * Empty rate          - share of queries where the relevance floor returned nothing
 
-Labels are page-level and hand-written from data/sources.txt; extend them with chunk ids reviewed by a
-person for a stricter benchmark. Written to evals/retrieval_report.md and .json.
+Relevance labels (hand-written by the author from the indexed pages - a small, self-labelled set):
+  * relevant_url_contains - page level: the chunk's URL contains one of these substrings, OR
+  * relevant_text_all     - chunk level: the chunk's text contains ALL these terms (e.g. a home-page chunk
+                            that lists both machines is relevant for "Get Clássica vs Get Smart").
+Written to evals/retrieval_report.md and .json.
 """
 
 from __future__ import annotations
@@ -29,8 +32,15 @@ from app.rag.store import VectorStore
 HERE = Path(__file__).resolve().parent
 
 
-def score(hits: list[dict], labels: list[str], k: int) -> dict:
-    rel = [any(lbl in h["url"] for lbl in labels) for h in hits[:k]]
+def is_relevant(hit: dict, case: dict) -> bool:
+    if any(lbl in hit["url"] for lbl in case["relevant_url_contains"]):
+        return True
+    terms = case.get("relevant_text_all") or []
+    return bool(terms) and all(t.lower() in hit.get("text", "").lower() for t in terms)
+
+
+def score(hits: list[dict], case: dict, k: int) -> dict:
+    rel = [is_relevant(h, case) for h in hits[:k]]
     first = next((i + 1 for i, r in enumerate(rel) if r), None)
     return {"hit": first is not None, "rr": 1 / first if first else 0.0,
             "precision": (sum(rel) / len(rel)) if rel else 0.0, "empty": not hits}
@@ -50,7 +60,7 @@ def main(k: int = 5) -> None:
         row = {"id": case["id"], "query": case["query"]}
         for mode in results:
             hits = retriever.search(case["query"], top_k=k, mode=mode)
-            s = score(hits, case["relevant_url_contains"], k)
+            s = score(hits, case, k)
             results[mode].append(s)
             row[mode] = {**s, "top_urls": [h["url"] for h in hits[:3]]}
         rows.append(row)

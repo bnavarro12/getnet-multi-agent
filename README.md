@@ -23,7 +23,7 @@ sharing Postgres.
   loop (web + Telegram), conversation memory, API-key identity, multi-replica state, tracing, metrics and cost,
   evaluation with a multi-provider judge panel + human calibration, CI on SQLite and Postgres
 
-> **Version 2:** improvements update. §10 summarizes what changed.
+> **Version 3:** improvements update. §10 summarizes what changed.
 
 ---
 
@@ -119,13 +119,17 @@ All settings are environment variables (see `.env.example`). The most relevant:
 | `ADMIN_API_KEY` | – | Staff key for `/dashboard`, `/agent`, `/metrics`, `/analytics`, `/evals`, `/handoffs` (empty = disabled) |
 | `AUTH_ENABLED` | `true` | Identity from the API key; `false` = trust `user_id` from the body |
 | `RATE_LIMIT_PER_MINUTE` | `20` | Per merchant and per client IP |
-| `MEMORY_MAX_TURNS` / `SESSION_TTL_HOURS` | `6` / `24` | Turns given to the agents / idle time before a new session |
+| `MEMORY_MAX_TURNS` / `SESSION_TTL_HOURS` | `6` / `24` | Recent turns given to the agents (older turns go into a rolling summary) / idle time before a new session |
 | `MAX_PLAN_STEPS` / `PLAN_PARALLEL` | `2` / `true` | Specialists in a plan, run in parallel |
 | `SUPERVISOR_EXTRA_STEPS` | `1` | Extra specialists the supervisor may call after observing the findings |
 | `DATABASE_URL` | – (SQLite on the volume) | Shared state; `postgresql+psycopg://…` for several replicas |
 | `JUDGE_MODEL` | `gemini-flash-latest` | Gemini judge (a larger model than the agents) |
 | `EXTERNAL_JUDGE_API_KEY` / `_BASE_URL` / `_MODEL` | – / Groq / `openai/gpt-oss-120b` | Second judge from another provider (any OpenAI-compatible API) |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | – | Human hand-offs over Telegram (§5) |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` / `TELEGRAM_ALLOWED_USER_IDS` | – | Human hand-offs over Telegram (§5); the allowlist is required |
+| `SLA_HIGH_MINUTES` / `SLA_NORMAL_MINUTES` | `120` / `480` | Response-time targets; an open case past its target is re-escalated once |
+| `AUTH_JWT_JWKS_URL` or `AUTH_JWT_SECRET` (+ `_ISSUER`, `_AUDIENCE`) | – | Accept OIDC/JWT access tokens (`sub` = merchant) besides API keys |
+| `RATE_LIMIT_FAIL_OPEN` | `false` | If the shared counter is unavailable: refuse with 503 (default) or let requests through |
+| `POSTGRES_PASSWORD` | – | Required by `docker-compose.replicas.yml` (no default password) |
 | `INDEX_MAX_AGE_DAYS` | `7` | Older index is refreshed in the background |
 
 The `-latest` aliases always resolve to the current Gemini release. To pin a version (recommended for production
@@ -180,8 +184,8 @@ flowchart TD
 | Agent | Responsibility | How it works | Tools |
 |---|---|---|---|
 | **Router** (+ planner) | Entry point. Decides who handles the message and in which order. | One LLM call with a JSON schema → `route`, `confidence`, `language`, `reason`, `reply`, `plan`. Sees the last turns of the conversation. Validated defensively: invalid output becomes a 0-confidence decision; the plan only accepts known specialists, no repeats, starting with the route. | – |
-| **Knowledge** | Getnet products & services; general real-time questions. | Tool-calling loop. Searches the knowledge base first, falls back to the web, answers only from tool results. | `search_knowledge_base`, `web_search`, `escalate_to_human` |
-| **Customer Support** | The merchant's own account: deposits, transactions, declines, card machines. | Tool-calling loop over the merchant's data; uses the help center for official procedures; opens tickets when troubleshooting is not enough. | `get_customer_profile`, `get_sales_and_settlements`, `get_recent_transactions`, `get_terminal_status`, `open_support_ticket`, `search_knowledge_base`, `escalate_to_human` |
+| **Knowledge** | Getnet products & services; general real-time questions. | Tool-calling loop. Searches the knowledge base first; real-time data comes from dedicated APIs (weather forecast: Open-Meteo; exchange rates: ECB via Frankfurter), news from web search; answers only from tool results and says which part the sources don't cover. | `search_knowledge_base`, `get_weather_forecast`, `get_exchange_rate`, `web_search`, `escalate_to_human` |
+| **Customer Support** | The merchant's own account: deposits, transactions, declines, card machines. | Tool-calling loop over the merchant's data; uses the help center for official procedures; opens tickets when troubleshooting is not enough. | `get_customer_profile`, `get_sales_and_settlements`, `get_recent_transactions`, `get_terminal_status`, `open_support_ticket`, `request_refund` (needs human approval), `search_knowledge_base`, `escalate_to_human` |
 | **Supervisor** | Runs multi-step plans: fan-out, observe, decide. | Runs the plan's specialists **in parallel** on a shared context; then one structured call **observes** their findings and **decides**: answer now (merging only what the specialists found) or name a missing specialist + task. That specialist runs and the supervisor answers (bounded by `SUPERVISOR_EXTRA_STEPS`, so the loop always ends). Any step asking for a human re-plans to a hand-off. | – |
 | **Human Escalation** (bonus) | Hand-off to a human specialist. | LLM produces a case summary (with the whole conversation), priority and category, then a `HUM-` ticket is created, linked to the session, and the user gets a protocol number. One open hand-off per conversation. Falls back to a template if the LLM fails. | creates `HUM-` tickets |
 
@@ -246,11 +250,11 @@ user question ──► dense (cosine) [+ BM25 + RRF when hybrid] ──► rele
 | **Chunking** | Paragraph-aware, ~1000 characters with 150 overlap; the page title is prefixed to every chunk; duplicate chunks across pages are removed. | Paragraph boundaries keep ideas intact; overlap keeps answers that span a boundary; the title tells the model which product a chunk is about. |
 | **Embedding** | `gemini-embedding-001`, 768 dimensions, `RETRIEVAL_DOCUMENT` for chunks and `RETRIEVAL_QUERY` for questions. | Multilingual: English questions retrieve Portuguese content. Asymmetric task types improve retrieval quality. |
 | **Storage** | `app/rag/store.py`: unit-normalized vectors in numpy, persisted as JSON in a Docker volume. | For a few hundred chunks, exact brute-force search takes well under 1 ms and has no infrastructure to run. The interface (`add` / `search` / `save` / `load`) maps directly to Chroma, pgvector or Qdrant if the corpus grows. |
-| **Retrieval (dense, hybrid optional)** | Dense ranking (cosine) + sparse ranking (BM25, `app/rag/bm25.py`, keeps tokens such as `d+1`) fused with **Reciprocal Rank Fusion** (k = 60), top-5. Relevance floor: cosine ≥ 0.45, or ≥ 0.35 for BM25's top 3 (strong exact match). Available with `RETRIEVAL_MODE=hybrid`; **the default is dense** because on the retrieval eval hybrid did not beat it on this corpus (Recall@5 0.93 for both; MRR@5 0.88 dense vs. 0.82 hybrid). | Embeddings capture meaning; BM25 catches exact product names and codes that embeddings blur. RRF uses ranks only, so the two score scales never need calibrating. Irrelevant chunks are worse than none: the floor keeps "nothing found" for unrelated questions. |
+| **Retrieval (dense, hybrid optional)** | Dense ranking (cosine) + sparse ranking (BM25, `app/rag/bm25.py`, keeps tokens such as `d+1`) fused with **Reciprocal Rank Fusion** (k = 60), top-5. Relevance floor: cosine ≥ 0.45, or ≥ 0.35 for BM25's top 3 (strong exact match). Available with `RETRIEVAL_MODE=hybrid`; **the default is dense** because on the retrieval eval hybrid did not beat it on this corpus (30 queries: Recall@5 0.967 for both; MRR@5 0.925 dense vs. 0.900 hybrid, Precision@5 0.687 vs. 0.640). | Embeddings capture meaning; BM25 catches exact product names and codes that embeddings blur. RRF uses ranks only, so the two score scales never need calibrating. Irrelevant chunks are worse than none: the floor keeps "nothing found" for unrelated questions. |
 | **Untrusted content** | Instruction-like sentences are removed and every chunk / web snippet is wrapped in `<untrusted_content>`; prompts say tool results are data, never instructions. Chunks with injection patterns are dropped at ingestion. | Indirect prompt injection: a web page must not be able to give the agent orders. |
 | **Freshness** | `built_at` in the index metadata; `/health` shows the age; older than `INDEX_MAX_AGE_DAYS` → background rebuild with an atomic swap (a failed crawl keeps the old index); `POST /admin/reindex` on demand. A committed snapshot makes the first start deterministic. | The website changes; the index must not silently go stale, and a refresh must never take the service down. |
-| **Reranking (optional)** | `RETRIEVAL_MODE=dense+rerank`: the 10 best chunks are re-ordered by an LLM that reads the question and each chunk and scores how well it *answers* it (cross-encoder style), one structured call per search; any failure keeps the original order. | Similarity finds related text; a reranker judges whether it actually answers the question. **Measured, kept off:** on this corpus it did not beat dense (MRR@5 0.83 vs. 0.88; Recall@5 0.93 for all four modes), so dense stays the default. |
-| **Retrieval metrics** | `evals/run_retrieval_evals.py`: Recall@5 (hit rate), MRR@5, Precision@5 and empty rate for **all four modes** (dense, hybrid, dense+rerank, hybrid+rerank) on 14 labelled queries; the report names the best mode. | Measures retrieval separately from generation, so a bad answer can be traced to "didn't find it" or "found it and misused it". |
+| **Reranking (optional)** | `RETRIEVAL_MODE=dense+rerank`: the 10 best chunks are re-ordered by an LLM that reads the question and each chunk and scores how well it *answers* it (cross-encoder style), one structured call per search; any failure keeps the original order. | Similarity finds related text; a reranker judges whether it actually answers the question. **Measured, kept off:** on this corpus it did not beat dense (MRR@5 0.908 for dense+rerank and 0.859 for hybrid+rerank, against 0.925 for plain dense; it also costs one LLM call per search), so dense stays the default. |
+| **Retrieval metrics** | `evals/run_retrieval_evals.py`: Recall@5 (hit rate), MRR@5, Precision@5 and empty rate for **all four modes** (dense, hybrid, dense+rerank, hybrid+rerank) on 30 labelled queries (page-level labels by URL, plus chunk-level labels where the answer lives on a general page, e.g. a home-page chunk listing both machines); the report names the best mode. | Measures retrieval separately from generation, so a bad answer can be traced to "didn't find it" or "found it and misused it". |
 | **Generation** | The Knowledge Agent calls `search_knowledge_base` (it may reformulate and search again), then answers only from the results. Sources are returned in a separate `sources` field. | Grounding rules live in the prompt; citations let users and evaluators check the answer. |
 
 ---
@@ -273,6 +277,15 @@ user question ──► dense (cosine) [+ BM25 + RRF when hybrid] ──► rele
 - **Read vs. write tools.** Tools that change something (`open_support_ticket`) are marked `side_effect=True`: at most
   one write per turn, and the write is **idempotent** — one open ticket per merchant + category in 24 h; a repeat returns
   the existing ticket (`deduplicated: true`). Hand-offs are idempotent per conversation.
+- **Risky actions need a human.** `request_refund` moves money, so the tool does **not** refund: it checks the
+  transaction and records an approval request. The orchestrator opens an `APR-` case; only an operator's **approve**
+  (web inbox or Telegram `/approve`) runs the refund, and the result plus the operator's name go back to the customer and
+  into the case. **Reject** runs nothing. Asked again for a sale already refunded, the tool reads the
+  system of record and answers with the existing refund id instead of opening a case a human would only reject;
+  `execute_refund` checks the same thing, so the money moves once per sale even if a case is approved twice.
+- **Shared context is thread-safe.** Parallel specialists write sources, evidence and tickets into one request context;
+  every write goes through the context's own lock (`ToolContext.add_source/add_evidence/add_ticket`), with a test that
+  writes from several threads at once.
 - **Reliability:** request timeout, exponential backoff on 429/5xx errors and a **circuit breaker**: after 5 consecutive
   failures the LLM calls fail fast for 30 s (state shown in `/health`) instead of making every user wait for timeouts.
 
@@ -282,13 +295,18 @@ user question ──► dense (cosine) [+ BM25 + RRF when hybrid] ──► rele
 
 **Identity and access** (`app/security.py`):
 
-- the merchant is identified by its **API key** (`Authorization: Bearer`); keys are stored as sha256 hashes in
-  `data/api_keys.json`. The `user_id` in the body must match the key (403 otherwise), so changing the body no longer reads
-  another merchant's data. A message that names another merchant's account is refused before any LLM call.
-  In production this is where Getnet's OAuth2/OIDC token would be validated;
+- the merchant is identified by an **OIDC/JWT access token** from the company's identity provider (signature checked
+  against its JWKS URL, or a shared HS256 secret; `exp` required; issuer and audience checked; `sub` = merchant) **or** by
+  an **API key** (`Authorization: Bearer`). Keys are stored as sha256 hashes in `data/api_keys.json`, each with an
+  optional `expires_at` and `revoked` flag: rotation = `python -m app.security new-key <user_id> --days 90`, then mark the
+  old one revoked. The `user_id` in the body must match the identity (403 otherwise). A message that names another
+  merchant's account is refused before any LLM call;
 - a session belongs to one merchant; feedback can only be given by the merchant who asked;
-- operational and human-specialist endpoints require the **staff key** (`X-Admin-Key`, constant-time comparison);
-- **rate limiting** per merchant and per IP (429 + `Retry-After`).
+- operational and human-specialist endpoints require a **staff key** (`X-Admin-Key`, constant-time comparison):
+  `ADMIN_API_KEY`, or a **personal key per operator** in `data/staff_keys.json`. The key identifies who acted, and that
+  name is stored on the case (`answered_by`) — the audit trail of every reply and approval;
+- **rate limiting** per merchant and per IP (429 + `Retry-After`), shared by all replicas; if the counter cannot be
+  updated the request is **refused (503), not let through** (`RATE_LIMIT_FAIL_OPEN=true` only by explicit choice).
 
 **Input** (`app/guardrails.py`, deterministic and tested):
 
@@ -330,16 +348,27 @@ category, creates a `HUM-` ticket linked to the session and tells the user the p
 
 The reply is claimed atomically (only one answer per hand-off wins, even across replicas), and a repeated reply returns 409.
 
+**Approval cases (`APR-`).** Same loop, but for an action that must not run on the model's say-so (a refund): the case
+shows Approve / Reject instead of a free reply; nothing runs before the decision; the decision, the operator and the
+result are stored on the case and in the conversation.
+
+**SLA.** Each case has a response-time target (high priority 2 h, normal 8 h; configurable). A background check
+(every minute, in the API or in the Telegram worker) finds open cases past their target, **re-escalates them once**
+(priority → high, `escalation_level = 1`, shown in the inbox) and warns the team again on Telegram as a reply to the
+original case message. The re-escalation is claimed atomically, so with several replicas the team is warned once.
+
 **Over Telegram** (`app/telegram.py`, optional): the team gets every new hand-off in a Telegram chat (ticket, priority,
 summary, last turns). The specialist simply **replies to that message** on the phone; the reply resumes the
 conversation exactly like the web inbox, and the bot confirms what was sent to the customer. `/close <text>` closes the
-case. Only messages from the configured chat (and `TELEGRAM_ALLOWED_USER_IDS`, when set) that reply to a hand-off are
-accepted. Setup:
+case; on an approval case `/approve [note]` or `/reject [note]`. Only messages from the configured chat **and** from the
+user ids in `TELEGRAM_ALLOWED_USER_IDS` that reply to a case are accepted; the allowlist is **required** (without it the
+bridge does not start). The operator is recorded as `tg:<username>`. Setup:
 
 1. In Telegram, talk to **@BotFather** → `/newbot` → copy the token.
 2. Create a group for the support team, add the bot, send any message, then open
    `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id` (a negative number for groups).
-3. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` and restart. With several replicas the replies are read by
+3. Set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and `TELEGRAM_ALLOWED_USER_IDS` (your numeric user id: it appears in
+   the logs as `telegram_update_ignored ... user_id` when you message the group) in `.env` and restart. With several replicas the replies are read by
    one worker (`--profile telegram` in `docker-compose.replicas.yml`), because Telegram allows one reader per bot.
 
 ---
@@ -355,12 +384,13 @@ Testing an LLM system means separating **what must always be true** (the workflo
 | **Integration (orchestration)** | Full flow with a scripted `FakeLLM`: correct agent per scenario, expected tools called, sources returned, escalation paths (explicit, low confidence, specialist-requested, loop cap), injection never reaching the LLM, PII masking end to end, web-search and LLM failures degrading gracefully, user-id isolation, trace and metrics recorded | `tests/test_orchestration.py` | No |
 | **API contract** | Response schema, payload validation (422s), `/health`, `/metrics` | `tests/test_api.py` | No |
 | **Replicas, injection, retrieval, judges, Telegram** | Two "replicas" sharing sessions, tickets and rate limits; one human reply wins; legacy import; obfuscated and paraphrased injection; reranker order and fallback; external judge (HTTP mocked), agreement and kappa; human labels tied to the exact answer; forbidden-term check; Telegram notification, reply, close, chat and user filtering | `tests/test_v3.py` | No |
+| **v3 behaviour** | Thread-safe shared context; refund needs approval (approve runs it, reject doesn't, plain reply can't); operator recorded (staff keys, Telegram); required Telegram allowlist; SLA re-escalation once; turn 15 still knows turn 1 (rolling summary); JWT signature / expiry / audience; expired and revoked keys; fail-closed rate limiter; forecast API instead of web snippets; numeric grounding check | `tests/test_v31.py` | No |
 | **v2 behaviour** | Identity boundary (401/403, swapped `user_id`), staff endpoints, rate limit, memory across turns and restarts, session ownership, human reply loop, idempotent hand-offs and tickets, write limit, two-step plan + synthesis, re-planning to a human, indirect injection (retrieval, web, ingestion), official-domain preference, BM25/hybrid retrieval, circuit breaker | `tests/test_v2.py` | No |
 | **Evaluation (quality)** | Real model on a labelled dataset: routing accuracy, tool-selection accuracy, key-content checks, LLM-as-judge groundedness and helpfulness, latency and tokens | `evals/` | Yes |
 
 The `FakeLLM` (`tests/fakes.py`) implements the same interface as the Gemini client: it routes by keywords, calls the
 tool a scenario needs, and answers by echoing tool results. That makes integration tests **deterministic, offline and
-fast** (111 tests in a few seconds), so they run on every commit: **GitHub Actions** (`.github/workflows/ci.yml`)
+fast** (132 tests in a few seconds), so they run on every commit: **GitHub Actions** (`.github/workflows/ci.yml`)
 installs the hash-locked dependencies, runs the suite **on SQLite and again on a real Postgres** (`TEST_DATABASE_URL`),
 builds the test image and checks that the runtime image has no tests or pytest inside. A failing integration test means the
 orchestration broke, not that the model had a bad day.
@@ -390,13 +420,29 @@ orchestration broke, not that the model had a bad day.
   Loki, ELK or Datadog. Sensitive data is masked before it reaches the logs.
 - **Metrics:** `GET /metrics` exposes requests, errors, routes, guardrail blocks, escalations, tool-call counts,
   tokens, estimated cost, security flags (e.g. removed injection text) and p50/p95/p99 latency per route.
-- **Evaluation** (`evals/`): 32 labelled cases in 12 categories — the 10 challenge scenarios plus Portuguese, escalation,
+- **Evaluation** (`evals/`): 34 labelled cases in 12 categories — the 10 challenge scenarios plus Portuguese, escalation,
   out-of-scope, greeting, unknown customer, **multi-turn memory**, **mixed (two specialists)** and **adversarial**
-  (Portuguese jailbreak, paraphrased role change, l33t-speak injection, fake "developer mode", cross-merchant data).
+  (Portuguese jailbreak, paraphrased role change, l33t-speak injection, fake "developer mode", cross-merchant data),
+  plus a refund that must wait for approval and a long conversation that returns to its first problem.
   The runner writes `evals/report.md` / `report.json` (committed) with results **per category**, the models and
   prompt version used.
   - Rule checks need no LLM: route, tools (cases that expect no tools fail if any is called), required terms and
-    **forbidden terms** (e.g. a card number the user typed must never come back).
+    **forbidden terms** (e.g. a card number the user typed must never come back; a forecast answer must not talk about
+    "typical" or "seasonal" weather).
+  - Two cases carry a `note` instead of an `expected_tools` label, because what they measure is the answer, not
+    which tool produced it: the memory case (a correct answer may come from the rolling summary) and the refund
+    case (on a re-run the sale is already refunded, so the tool reports the existing refund instead of opening a
+    case). The invariant each one asserts is in its `note`.
+  - **Numeric grounding check (deterministic):** every number in an answer (price, fee, amount, date) must appear in the
+    evidence or in the question, whatever the format (`R$ 79,90` = `79.9`). Numbers that appear nowhere are listed per
+    case (`unsupported_numbers`) and summarized as `numeric_grounding_rate`. It does not depend on an LLM judge, so an
+    invented price is flagged even when the judges score the answer well.
+    In the committed run, 3 of 34 answers are flagged (`numeric_grounding_rate` 0.912) and all three are daily
+    totals the agent computed correctly from the evidence: R$ 600,00 (120,00 + 480,00 credit) and R$ 82,20
+    (27,90 + 54,30 debit). The sales tool returns each sale and no total, so a correct sum is flagged like any
+    other derived number: the check points at numbers to verify, it does not claim they are wrong. Checking the
+    arithmetic itself is the next step.
+  - The report also has p50 / p95 / **p99** latency, tokens and **estimated cost per request**.
   - **Judge panel from different providers:** a larger Gemini model *and* an independent open-weights model on
     another provider (Groq, any OpenAI-compatible API). Both receive the **full** tool outputs. The report shows each
     judge's scores and their **agreement** (exact, within one point, mean difference, quadratic-weighted kappa).
@@ -405,7 +451,9 @@ orchestration broke, not that the model had a bad day.
     (`evals/calibration_report.md`). A judge that disagrees with people is not trusted, whatever its average.
   - **Stability:** `--repeat N` runs the dataset N times; the report lists the pass rate per case and unstable cases.
 
-**First human calibration (12 answers, blind to the judges)** — [`evals/calibration_report.md`](evals/calibration_report.md):
+**First human calibration (12 answers, blind to the judges)** — [`evals/calibration_report.md`](evals/calibration_report.md);
+the labels refer to the answers of the 32-case run archived in `evals/calibration_run_report.json` (reproduce with
+`python -m evals.human_review score --report evals/calibration_run_report.json`):
 
 | Judge vs. person | Groundedness: exact · within 1 point | Helpfulness: exact · within 1 point · κ |
 |---|---|---|
@@ -453,8 +501,17 @@ Agent-level tracing tools such as Langfuse or LangSmith fit directly on top of t
   would be my choice if the flow became a real graph with loops between agents; the human pause/resume and persistent state needed here fit in a small state store.
 - **Gemini.** Free tier, and one provider for both the LLM and embeddings. The `LLMClient` abstraction keeps the choice reversible.
 - **numpy vector store** instead of a vector database: exact, fast and zero-ops at this size (see §3).
-- **DuckDuckGo search** needs no API key. Web results (weather, exchange rates) are approximate snippets, and the agent
-  says where they came from. In production I would use dedicated APIs for weather and exchange rates.
+- **Real-time data from dedicated APIs.** Weather forecasts (Open-Meteo) and exchange rates (ECB reference rates via
+  Frankfurter) are free and need no key, and return a date the answer states; DuckDuckGo search (no key) is kept for
+  news and other general questions, whose snippets are approximate.
+- **Memory window + rolling summary.** The agents get the last 6 turns verbatim; turns that leave the window are folded
+  into a short summary (one small LLM call every few turns, stored on the session), so a long conversation still knows
+  what it started with without sending all of it on every call.
+- **Schema changes are additive.** New columns are added in place at startup (history kept). That is enough while the
+  schema only grows; a destructive change (rename, type change) would need versioned migrations (Alembic).
+- **Small, self-labelled eval sets.** 34 cases, 30 retrieval queries and 12 human labels, all written by the author.
+  They catch regressions and judge defects, but they are not an independent benchmark: the next step is labels from
+  Getnet's support team and real (anonymized) conversations.
 - **Mock customer data.** `data/customers.json` is fictitious and uses relative dates, so "yesterday's sales" always
   works. Settlement rules are simplified (business days without holidays).
 - **One database, two backends.** All mutable state — conversations, hand-offs, tickets, analytics and rate-limit
@@ -466,7 +523,7 @@ Agent-level tracing tools such as Langfuse or LangSmith fit directly on top of t
   questions; an open-ended planner with many loops is where a graph framework such as LangGraph would start to pay off.
 - **Crawl freshness.** Age-based refresh. In production a scheduled job would compare page hashes and re-embed only what changed.
 
-**Production evolution:** OAuth2/OIDC instead of API keys, a queue for long-running agents, a managed vector database with
+**Production evolution:** connect the JWT validation to Getnet's identity provider, a queue for long-running agents, a managed vector database with
 incremental re-ingestion, Prometheus/OpenTelemetry instead of in-process metrics, recorded-response CI, a larger human
 calibration set, and a canary evaluation before every prompt or model release.
 
@@ -536,6 +593,19 @@ Demo API keys (fictitious, only for this challenge): `demo-key-cliente1988`, `de
 | Write tools | No limits | `side_effect` tools, one write per turn, idempotent tickets and hand-offs | `tools/base.py`, `data/customer_repository.py` |
 | Reliability and cost | Retries | Circuit breaker, estimated cost, p99 | `resilience.py`, `observability.py` |
 | Build and CI | Single-stage image, no lock, live crawl on first start | Hash-locked dependencies, multi-stage image without tests, committed index snapshot (deterministic first start), GitHub Actions on SQLite and Postgres | `Dockerfile`, `requirements*.lock`, `data/index_snapshot.json.gz`, `.github/workflows/ci.yml` |
+
+**v3 (improvements update):**
+
+| Area | v3 | Where |
+|---|---|---|
+| Risky actions | `request_refund` opens an `APR-` approval case; only an operator's approve runs it (reject runs nothing) | `tools/support_tools.py`, `orchestrator.py`, `static/agent.html`, `telegram.py` |
+| Human loop | Operator identity on every reply/decision (personal staff keys, `tg:<user>`); SLA re-escalation once, atomic across replicas; Telegram allowlist required | `security.py`, `memory.py`, `orchestrator.check_sla`, `telegram.py` |
+| Memory | Rolling summary of the turns that left the 6-turn window | `memory.py`, `orchestrator._refresh_summary` |
+| Identity | OIDC/JWT (JWKS or HS256, exp/iss/aud) besides API keys; keys with expiry, revocation and a rotation command; rate limiter fails closed | `security.py` |
+| Concurrency | One lock per request context for all shared writes of parallel specialists | `tools/base.py` |
+| Real-time data | Forecast and exchange-rate APIs instead of web snippets | `tools/knowledge_tools.py` |
+| Evaluation | Deterministic numeric grounding check; p99 and cost in the report; 34 cases (refund approval, long conversation); 30 retrieval queries with chunk-level labels | `evals/` |
+| Deployment | No default database password in the replicas compose | `docker-compose.replicas.yml` |
 
 ---
 

@@ -36,6 +36,8 @@ sessions = Table(
     Column("session_id", String(32), primary_key=True),
     Column("user_id", String(64), nullable=False, index=True),
     Column("created_at", Float), Column("updated_at", Float),
+    Column("summary", Text),                           # rolling summary of the turns that left the window
+    Column("summary_upto", Integer),                   # last turn id included in the summary
 )
 
 turns = Table(
@@ -58,6 +60,10 @@ handoffs = Table(
     Column("status", String(16), index=True),          # open | answered | closed
     Column("created_at", Float), Column("answered_at", Float), Column("human_reply", Text),
     Column("channel_ref", String(64)),                 # e.g. the Telegram message id of the notification
+    Column("kind", String(16)),                        # handoff | approval (a risky action waiting for a human)
+    Column("action", Text),                            # approval: the action to run if approved (JSON)
+    Column("answered_by", String(64)),                 # audit: which operator answered / decided
+    Column("escalation_level", Integer),               # 0 = normal; 1 = overdue (SLA missed), re-escalated
 )
 
 tickets = Table(

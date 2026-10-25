@@ -26,6 +26,7 @@ import logging
 import socket
 import threading
 import time
+from typing import Literal
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -64,8 +65,9 @@ class FeedbackRequest(BaseModel):
 
 
 class HumanReply(BaseModel):
-    reply: str = Field(..., min_length=1, max_length=4000)
+    reply: str = Field("", max_length=4000)
     close: bool = Field(False, description="true = case solved (closed); false = answered, may continue")
+    decision: Literal["approve", "reject"] | None = Field(None, description="required for approval cases (APR-)")
 
 
 def index_age_days(store: VectorStore) -> float | None:
@@ -160,19 +162,36 @@ async def lifespan(app: FastAPI):
         if bridge is not None:
             orch = app.state.orchestrator
             orch.on_handoff = lambda h: bridge.notify_handoff(orch.memory, h)
+            orch.on_overdue = bridge.notify_overdue
             if settings.telegram_polling:
                 bridge.start(orch)
             app.state.telegram = bridge
     if not getattr(app.state, "api_keys", None):
         app.state.api_keys = ApiKeyStore(settings.api_keys_file)
     if not getattr(app.state, "rate_limiter", None):
-        app.state.rate_limiter = DbRateLimiter(app.state.orchestrator.db, settings.rate_limit_per_minute)
+        app.state.rate_limiter = DbRateLimiter(app.state.orchestrator.db, settings.rate_limit_per_minute,
+                                               fail_open=settings.rate_limit_fail_open)
+    if not getattr(app.state, "staff_keys", None):
+        app.state.staff_keys = ApiKeyStore(settings.staff_keys_file)
+    if settings.sla_check_interval_s > 0 and app.state.orchestrator.memory is not None:
+        threading.Thread(target=sla_loop, args=(app.state.orchestrator, settings.sla_check_interval_s),
+                         daemon=True, name="sla-check").start()
     yield
+
+
+def sla_loop(orch: Orchestrator, interval_s: float) -> None:
+    """Background check: open cases past their response-time target are re-escalated (see check_sla)."""
+    while True:
+        time.sleep(interval_s)
+        try:
+            orch.check_sla()
+        except Exception:
+            logger.exception("sla_check_failed")
 
 
 app = FastAPI(
     title="Getnet Multi-Agent Support System",
-    version="2.0.0",
+    version="3.0.0",
     description=("Router + planner -> Knowledge (hybrid RAG + web) / Customer Support (tools) -> Supervisor synthesis "
                  "-> Human hand-off with reply loop; conversation memory, guardrails, auth and tracing."),
     lifespan=lifespan,
@@ -195,10 +214,13 @@ def _settings(request: Request):
 
 
 def _client_key(request: Request) -> str:
+    """Client IP for the rate limiter. Behind the load balancer, X-Forwarded-For is
+    "<what the client sent>, <the IP nginx saw>": only the LAST hop was written by our proxy, so the
+    first entries are attacker-controlled and would let anyone bypass the per-IP limit by rotating them."""
     if _settings(request).trust_proxy_headers:
         forwarded = request.headers.get("X-Forwarded-For", "")
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            return forwarded.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -250,7 +272,7 @@ async def feedback(req: FeedbackRequest, request: Request) -> dict:
 # -- human specialists (staff) ----------------------------------------------------
 @app.get("/handoffs")
 async def list_handoffs(request: Request, status: str | None = "open") -> dict:
-    require_staff(request, _settings(request))
+    require_staff(request, _settings(request), request.app.state.staff_keys)
     memory = request.app.state.orchestrator.memory
     items = memory.list_handoffs(status or None) if memory else []
     for h in items:
@@ -260,10 +282,11 @@ async def list_handoffs(request: Request, status: str | None = "open") -> dict:
 
 @app.post("/handoffs/{ticket_id}/reply")
 async def reply_handoff(ticket_id: str, body: HumanReply, request: Request) -> dict:
-    require_staff(request, _settings(request))
+    operator = require_staff(request, _settings(request), request.app.state.staff_keys)  # audit: who answered
     orch: Orchestrator = request.app.state.orchestrator
     try:
-        return await run_in_threadpool(orch.resume_after_human, ticket_id, body.reply, body.close)
+        return await run_in_threadpool(orch.resume_after_human, ticket_id, body.reply, body.close, operator,
+                                       body.decision)
     except KeyError:
         raise HTTPException(404, "unknown ticket")
     except ValueError as exc:
@@ -283,7 +306,7 @@ async def dashboard() -> FileResponse:
 
 @app.get("/analytics")
 async def analytics_summary(request: Request, days: float | None = None) -> dict:
-    require_staff(request, _settings(request))
+    require_staff(request, _settings(request), request.app.state.staff_keys)
     summary = request.app.state.analytics.summary(days=days)
     m = request.app.state.orchestrator.metrics
     k = summary["kpis"]
@@ -293,7 +316,7 @@ async def analytics_summary(request: Request, days: float | None = None) -> dict
 
 @app.get("/evals")
 async def evals_report(request: Request) -> dict:
-    require_staff(request, _settings(request))
+    require_staff(request, _settings(request), request.app.state.staff_keys)
     path = _settings(request).eval_report_path
     if not path.exists():
         return {"available": False}
@@ -302,7 +325,7 @@ async def evals_report(request: Request) -> dict:
 
 @app.post("/admin/reindex")
 async def reindex(request: Request) -> dict:
-    require_staff(request, _settings(request))
+    require_staff(request, _settings(request), request.app.state.staff_keys)
     threading.Thread(target=refresh_index, args=(request.app.state.orchestrator, _settings(request)), daemon=True).start()
     return {"started": True, "note": "Watch the logs for index_refreshed; the old index keeps serving meanwhile."}
 
@@ -326,5 +349,5 @@ async def health(request: Request) -> dict:
 
 @app.get("/metrics")
 async def metrics(request: Request) -> dict:
-    require_staff(request, _settings(request))
+    require_staff(request, _settings(request), request.app.state.staff_keys)
     return request.app.state.orchestrator.metrics.snapshot()

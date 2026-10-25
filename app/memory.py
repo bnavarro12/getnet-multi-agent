@@ -2,7 +2,8 @@
 
 Why this exists
   * Memory: turn 2 ("and what about today's?") must know what turn 1 was about. The last
-    MEMORY_MAX_TURNS turns of the session are given to the Router and the specialists.
+    MEMORY_MAX_TURNS turns of the session are given to the Router and the specialists, plus a
+    ROLLING SUMMARY of the older turns, so turn 15 still knows what turn 1 was about.
   * Survives restarts and works with several replicas: SQLite on the Docker volume by default,
     Postgres when DATABASE_URL points at it (every replica then sees the same conversations).
   * Human-in-the-loop: a hand-off is linked to the session, so when the human specialist answers,
@@ -23,7 +24,7 @@ import json
 import time
 import uuid
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from app.db import Database, handoffs, sessions, turns
 
@@ -52,6 +53,29 @@ class ConversationStore:
             new_id = uuid.uuid4().hex[:16]
             conn.execute(sessions.insert().values(session_id=new_id, user_id=user_id, created_at=now, updated_at=now))
             return new_id
+
+    # -- rolling summary (turns older than the window) ---------------------------
+    def summary(self, session_id: str) -> str:
+        with self.db.engine.connect() as conn:
+            return conn.execute(select(sessions.c.summary).where(sessions.c.session_id == session_id)).scalar() or ""
+
+    def turns_to_summarize(self, session_id: str, min_batch: int = 4) -> list[dict]:
+        """Turns that left the window and are not in the summary yet (only when there are enough of them)."""
+        with self.db.engine.connect() as conn:
+            upto = conn.execute(select(sessions.c.summary_upto).where(sessions.c.session_id == session_id)).scalar() or 0
+            ids = [r.id for r in conn.execute(select(turns.c.id).where(turns.c.session_id == session_id)
+                                              .order_by(turns.c.id.desc()).limit(self.max_turns))]
+            window_start = min(ids) if ids else 0
+            rows = conn.execute(select(turns).where(turns.c.session_id == session_id, turns.c.id > upto,
+                                                    turns.c.id < window_start).order_by(turns.c.id)).all()
+        if len(rows) < min_batch:
+            return []
+        return [{**self._turn(r), "id": r.id} for r in rows]
+
+    def save_summary(self, session_id: str, summary: str, upto_turn_id: int) -> None:
+        with self.db.engine.begin() as conn:
+            conn.execute(update(sessions).where(sessions.c.session_id == session_id)
+                         .values(summary=summary[:3000], summary_upto=upto_turn_id))
 
     def owner(self, session_id: str) -> str | None:
         with self.db.engine.connect() as conn:
@@ -85,14 +109,32 @@ class ConversationStore:
 
     # -- human hand-offs ------------------------------------------------------
     def create_handoff(self, *, ticket_id: str, session_id: str, user_id: str, agent: str, language: str,
-                       reason: str, summary: str, priority: str, category: str) -> None:
+                       reason: str, summary: str, priority: str, category: str, kind: str = "handoff",
+                       action: dict | None = None) -> None:
         with self.db.engine.begin() as conn:
             if conn.execute(select(handoffs.c.ticket_id).where(handoffs.c.ticket_id == ticket_id)).first():
                 return
             conn.execute(handoffs.insert().values(
                 ticket_id=ticket_id, session_id=session_id, user_id=user_id, agent=agent, language=language,
                 reason=reason, summary=summary, priority=priority, category=category, status="open",
-                created_at=time.time()))
+                created_at=time.time(), kind=kind, action=json.dumps(action) if action else None,
+                escalation_level=0))
+
+    def overdue_handoffs(self, sla_minutes: dict[str, float], now: float | None = None) -> list[dict]:
+        """Open cases past their response-time target that were not re-escalated yet."""
+        now = now or time.time()
+        with self.db.engine.connect() as conn:
+            rows = [dict(r._mapping) for r in conn.execute(select(handoffs).where(handoffs.c.status == "open"))]
+        return [h for h in rows if not h.get("escalation_level")
+                and now - (h["created_at"] or now) > 60 * sla_minutes.get(h.get("priority") or "normal", sla_minutes["normal"])]
+
+    def mark_reescalated(self, ticket_id: str) -> bool:
+        """Atomic claim: True only for the first replica that re-escalates this case."""
+        with self.db.engine.begin() as conn:
+            res = conn.execute(update(handoffs).where(handoffs.c.ticket_id == ticket_id,
+                                                      func.coalesce(handoffs.c.escalation_level, 0) == 0)
+                               .values(escalation_level=1, priority="high"))
+            return res.rowcount == 1
 
     def open_handoff_for(self, session_id: str) -> dict | None:
         with self.db.engine.connect() as conn:
@@ -121,10 +163,10 @@ class ConversationStore:
         with self.db.engine.connect() as conn:
             return [dict(r._mapping) for r in conn.execute(q)]
 
-    def answer_handoff(self, ticket_id: str, reply: str, close: bool) -> bool:
+    def answer_handoff(self, ticket_id: str, reply: str, close: bool, operator: str = "") -> bool:
         """Mark answered. Returns False if it was not open anymore (another replica/agent got there first)."""
         with self.db.engine.begin() as conn:
             res = conn.execute(update(handoffs).where(handoffs.c.ticket_id == ticket_id, handoffs.c.status == "open")
                                .values(status="closed" if close else "answered", answered_at=time.time(),
-                                       human_reply=reply[:4000]))
+                                       human_reply=reply[:4000], answered_by=operator[:64] or None))
             return res.rowcount == 1

@@ -31,6 +31,11 @@ DECLINE_CODES = {
 }
 
 
+def refund_category(transaction_id: str) -> str:
+    """Ticket category of a refund: one per sale, so the record and the idempotency key are the same thing."""
+    return f"refund:{transaction_id}"[:32]
+
+
 def add_business_days(start: date, days: int) -> date:
     current = start
     while days > 0:
@@ -139,14 +144,47 @@ class CustomerRepository:
                 c.created_at >= since).order_by(c.created_at.desc()).limit(1)).first()
             if existing:
                 return {**dict(existing._mapping), "deduplicated": True}
+            prefix = {"human_handoff": "HUM", "approval": "APR", "refund": "RFD"}.get(kind, "SUP")
             ticket = {
-                "ticket_id": f"{'HUM' if kind == 'human_handoff' else 'SUP'}-{uuid.uuid4().hex[:8].upper()}",
+                "ticket_id": f"{prefix}-{uuid.uuid4().hex[:8].upper()}",
                 "user_id": user_id, "kind": kind, "category": category, "priority": priority,
                 "summary": summary[:500], "status": "open",
                 "created_at": now.isoformat(timespec="seconds"),
             }
             conn.execute(tickets.insert().values(**ticket))
         return ticket
+
+    def find_transaction(self, user_id: str, transaction_id: str) -> dict | None:
+        for tx in (self._customers.get(user_id) or {}).get("transactions", []):
+            if tx["id"] == transaction_id:
+                return tx
+        return None
+
+    def refund_record(self, user_id: str, transaction_id: str) -> dict | None:
+        """The executed refund for this sale, if any. One record per sale (see execute_refund)."""
+        c = tickets.c
+        with self.db.engine.connect() as conn:
+            row = conn.execute(select(tickets).where(c.user_id == user_id, c.kind == "refund",
+                                                     c.category == refund_category(transaction_id))).first()
+        return dict(row._mapping) if row else None
+
+    def execute_refund(self, user_id: str, transaction_id: str, approved_by: str) -> dict:
+        """Runs ONLY after a human approved it (see Orchestrator.resume_after_human). Mock: records the refund."""
+        tx = self.find_transaction(user_id, transaction_id)
+        if tx is None:
+            return {"status": "failed", "error": "transaction_not_found"}
+        # Idempotent on the sale, not on the case: a customer can open a second approval case for a
+        # transaction already refunded, and a human could approve it again. The money moves once.
+        done = self.refund_record(user_id, transaction_id)
+        if done:
+            return {"status": "already_refunded", "refund_id": done["ticket_id"], "transaction_id": transaction_id,
+                    "amount": tx["amount"], "approved_by": approved_by}
+        record = self.create_ticket(user_id, refund_category(transaction_id),
+                                    f"Refund of {transaction_id} ({tx['amount']}) approved by {approved_by}",
+                                    kind="refund")
+        self.update_ticket(record["ticket_id"], status="executed")
+        return {"status": "executed", "refund_id": record["ticket_id"], "transaction_id": transaction_id,
+                "amount": tx["amount"], "approved_by": approved_by}
 
     def get_ticket(self, ticket_id: str) -> dict | None:
         with self.db.engine.connect() as conn:

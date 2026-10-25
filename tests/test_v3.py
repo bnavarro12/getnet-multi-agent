@@ -154,6 +154,7 @@ def test_human_review_scores_only_labels_of_the_same_answer(tmp_path, monkeypatc
     import evals.human_review as hr
     monkeypatch.setattr(hr, "HERE", tmp_path)
     monkeypatch.setattr(hr, "LABELS", tmp_path / "human_labels.csv")
+    monkeypatch.setattr(hr, "REPORT", tmp_path / "report.json")
     case = {"id": "kb-01", "category": "knowledge", "message": "q", "response": "answer v1",
             "judge": {"groundedness": 5, "helpfulness": 4},
             "judges": {"gemini:x": {"groundedness": 5, "helpfulness": 4}}}

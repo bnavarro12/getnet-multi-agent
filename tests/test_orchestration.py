@@ -17,10 +17,15 @@ def test_product_question_goes_to_knowledge_agent_with_rag(orchestrator):
     assert not r["escalated"]
 
 
-def test_general_question_uses_web_search(orchestrator):
+def test_weather_question_uses_the_forecast_api_not_web_snippets(orchestrator):
     r = orchestrator.handle("What's the weather forecast in Porto Alegre tomorrow?", "cliente1988")
-    assert r["agent"] == "knowledge" and r["tools_used"] == ["web_search"]
-    assert r["sources"][0]["type"] == "web"
+    assert r["agent"] == "knowledge" and r["tools_used"] == ["get_weather_forecast"]
+    assert r["sources"][0]["type"] == "api"
+
+
+def test_news_question_uses_web_search(orchestrator):
+    r = orchestrator.handle("Any news about Pix rules this week?", "cliente1988")
+    assert r["tools_used"] == ["web_search"] and r["sources"][0]["type"] == "web"
 
 
 def test_deposit_question_goes_to_support_with_customer_data(orchestrator):
@@ -88,6 +93,14 @@ def test_tool_loop_is_capped(settings, repo, store):
 
 def test_web_search_failure_degrades_gracefully(settings, repo, store):
     r = make_orchestrator(settings, repo, store, web_search=failing_web_search).handle(
+        "Any news about Pix rules this week?", "cliente1988")
+    assert "temporarily unavailable" in r["response"] and r["agent"] == "knowledge"
+
+
+def test_fx_api_failure_degrades_gracefully(settings, repo, store):
+    def broken(base, quote):
+        raise ConnectionError("down")
+    r = make_orchestrator(settings, repo, store, fx=broken).handle(
         "What's the euro exchange rate today?", "cliente1988")
     assert "temporarily unavailable" in r["response"] and r["agent"] == "knowledge"
 

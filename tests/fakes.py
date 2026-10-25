@@ -69,6 +69,10 @@ class FakeLLM:
                            "user": full_text, "model": model})
         user_text = self.current_message(full_text)
 
+        if system.startswith("Update the running summary"):   # rolling memory summary
+            return LLMResponse(text="Summary: " + full_text[:600],   # keeps the old summary + the new turns
+                               input_tokens=120, output_tokens=40)
+
         if json_schema is SUPERVISOR_SCHEMA:
             missing = self.supervisor_missing.pop(0) if self.supervisor_missing else "none"
             return LLMResponse(text=json.dumps({"answer": f"Combined answer. {full_text[:1500]}", "missing": missing,
@@ -117,8 +121,15 @@ class FakeLLM:
     @staticmethod
     def default_tool_plan(text: str, available: list[str]):
         t = text.lower()
-        if "weather" in t or "exchange" in t or "euro" in t:
+        if "weather" in t and "get_weather_forecast" in available:
+            return "get_weather_forecast", {"city": "Porto Alegre", "date": "2026-10-21"}
+        if ("exchange" in t or "euro" in t) and "get_exchange_rate" in available:
+            return "get_exchange_rate", {"base": "EUR", "quote": "BRL"}
+        if "news" in t:
             return "web_search", {"query": text}
+        if "request_refund" in available and "refund" in t:
+            tx = re.search(r"TX-\d+", text)
+            return "request_refund", {"transaction_id": tx.group(0) if tx else "", "reason": "customer request"}
         if "get_sales_and_settlements" in available and ("deposit" in t or "money" in t):
             return "get_sales_and_settlements", {"period": "yesterday"}
         if "get_recent_transactions" in available and "decline" in t:
@@ -136,3 +147,13 @@ def fake_web_search(query: str) -> list[dict]:
 
 def failing_web_search(query: str) -> list[dict]:
     raise ConnectionError("network down")
+
+
+def fake_weather(city: str, day: str) -> dict:
+    return {"source": "Open-Meteo forecast", "city": city, "date": day, "min_c": 16.0, "max_c": 27.0,
+            "rain_probability_pct": 40, "conditions": "partly cloudy"}
+
+
+def fake_fx(base: str, quote: str) -> dict:
+    return {"source": "European Central Bank reference rate (Frankfurter)", "base": base, "quote": quote,
+            "rate": 6.12, "date": "2026-10-20"}

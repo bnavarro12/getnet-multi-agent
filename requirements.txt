@@ -9,3 +9,4 @@ numpy==2.5.3
 ddgs==9.16.0
 sqlalchemy==2.0.45
 psycopg[binary]==3.2.13
+pyjwt[crypto]==2.10.1

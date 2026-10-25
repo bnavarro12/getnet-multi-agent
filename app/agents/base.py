@@ -25,13 +25,16 @@ class AgentResult:
 ROLE_LABELS = {"user": "Customer", "assistant": "Assistant", "human_agent": "Human specialist"}
 
 
-def format_input(message: str, history: list[dict] | None = None, task: str | None = None) -> str:
-    """Build the text an agent receives: earlier turns (memory) + the current message (+ plan task)."""
+def format_input(message: str, history: list[dict] | None = None, task: str | None = None,
+                 summary: str = "") -> str:
+    """Build the text an agent receives: summary of older turns + recent turns + the current message (+ task)."""
     parts = []
+    if summary:
+        parts.append(f"Summary of the earlier conversation: {summary}")
     if history:
         lines = [f"{ROLE_LABELS.get(t['role'], t['role'])}: {t['text'][:800]}" for t in history]
         parts.append("Conversation so far (oldest first, for context only):\n" + "\n".join(lines))
-    parts.append(f"Current customer message: {message}" if history or task else message)
+    parts.append(f"Current customer message: {message}" if history or task or summary else message)
     if task:
         parts.append(f"Your task in this plan: {task}")
     return "\n\n".join(parts)
@@ -81,7 +84,7 @@ class ToolAgent:
                             tspan.attrs["exception"] = str(exc)[:200]
                     tspan.attrs["result"] = _summarize(output)
                 used.append(call.name)
-                ctx.evidence.append({"tool": call.name, "args": call.args, "result": output})
+                ctx.add_evidence({"tool": call.name, "args": call.args, "result": output})
                 results.append((call.name, output))
             history.append(self.llm.tool_results_message(results))
 
